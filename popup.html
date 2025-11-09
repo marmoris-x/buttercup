@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html data-theme="cupcake" lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="initial-scale=1.0" />
+    <title>Buttercup</title>
+    <link href="assets/css/daisyui-4.7.2.full.min.css" rel="stylesheet" type="text/css" />
+    <script src="assets/js/tailwindcss.3.4.1.js"></script>
+    <style type="text/css">
+        body {
+            width: 400px;
+            height: 500px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .content-container {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0 1rem;
+        }
+
+        .form-control {
+            width: 100%;
+        }
+
+        #buttons {
+            grid-auto-flow: column !important;
+        }
+
+        .tab-content {
+            padding-top: 1rem;
+            width: 100%;
+            display: block;
+        }
+
+        .api-input {
+            width: 100%;
+            margin-bottom: 0.5rem;
+        }
+
+        .footer {
+            margin-top: auto;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="text-center pt-5 px-4">
+        <h1 class="text-5xl font-bold">Buttercup</h1>
+        <p class="text-sm pt-3 pb-3">
+            Replace YouTube's crappy auto-generated subtitles with
+            Buttercup's awesome Whisper-generated ones
+        </p>
+    </div>
+    <div role="tablist" class="tabs tabs-boxed mx-auto w-4/5">
+        <a role="tab" class="tab tab-active" id="tab-general">General</a>
+        <a role="tab" class="tab" id="tab-api">API Setup</a>
+        <a role="tab" class="tab" id="tab-advanced">Advanced</a>
+    </div>
+    </div>
+    
+    <div class="content-container">
+        <!-- General Settings Tab -->
+        <div id="general-tab" class="tab-content">
+            <div class="divider">Settings</div>
+            <div class="form-control">
+                <label class="label cursor-pointer">
+                    <span class="label-text">Enabled</span>
+                    <input type="checkbox" class="toggle" id="enabled" checked />
+                </label>
+                <label class="label cursor-pointer" id="translate-container">
+                    <span class="label-text">Translate everything to English</span>
+                    <input type="checkbox" class="toggle" id="translate" />
+                </label>
+                <label class="label cursor-pointer">
+                    <span class="label-text">Use cache database</span>
+                    <input type="checkbox" class="toggle" id="cache" checked />
+                </label>
+                <label class="label cursor-pointer">
+                    <span class="label-text">Download SRT</span>
+                    <input type="checkbox" class="toggle" id="download" />
+                </label>
+                <label class="label cursor-pointer">
+                    <span class="label-text">Language</span>
+                    <select class="select select-bordered" id="language">
+                        <option value="auto">Auto-Detect</option>
+                        <option value="en">English</option>
+                        <option value="de">German</option>
+                        <option value="es">Spanish</option>
+                        <option value="fr">French</option>
+                        <option value="it">Italian</option>
+                        <option value="ja">Japanese</option>
+                        <option value="ko">Korean</option>
+                        <option value="pt">Portuguese</option>
+                        <option value="ru">Russian</option>
+                        <option value="zh">Chinese</option>
+                        <option value="ar">Arabic</option>
+                    </select>
+                </label>
+            </div>
+        </div>
+        
+        <!-- API Setup Tab -->
+        <div id="api-tab" class="tab-content hidden">
+            <div class="divider">Groq API</div>
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Groq API Key</span>
+                </label>
+                <input type="password" placeholder="Enter your Groq API key" class="input input-bordered api-input" id="groq-api-key" />
+                
+                <label class="label">
+                    <span class="label-text">Groq Model</span>
+                </label>
+                <select class="select select-bordered w-full api-input" id="groq-model">
+                    <option value="whisper-large-v3">whisper-large-v3 (Best quality, multilingual, translation)</option>
+                    <option value="whisper-large-v3-turbo">whisper-large-v3-turbo (Faster, multilingual)</option>
+                    <option value="distil-whisper-large-v3-en">distil-whisper-large-v3-en (Fastest, English only)</option>
+                </select>
+                <p class="text-xs text-gray-500 mt-1" id="model-translation-note">
+                    Note: Only whisper-large-v3 supports translation
+                </p>
+            </div>
+            
+            <button class="btn btn-primary w-full mt-4 mb-4" id="save-api-settings">Save API Settings</button>
+        </div>
+        
+        <!-- Advanced Settings Tab -->
+        <div id="advanced-tab" class="tab-content hidden">
+            <div class="divider">Word-Level Timestamps</div>
+            <div class="form-control">
+                <label class="label cursor-pointer">
+                    <span class="label-text">Use word-level timestamps</span>
+                    <input type="checkbox" class="toggle" id="use-word-timestamps" checked />
+                </label>
+                
+                <div id="word-timestamp-settings">
+                    <label class="label">
+                        <span class="label-text">Words per line</span>
+                    </label>
+                    <input type="number" min="1" max="20" value="12" class="input input-bordered w-full mb-2" id="words-per-line" />
+                    
+                    <label class="label">
+                        <span class="label-text">Words per line break</span>
+                    </label>
+                    <input type="number" min="0" max="20" value="8" class="input input-bordered w-full mb-2" id="max-line-length" />
+                    <p class="text-xs text-gray-500 mt-1">
+                        Number of words before inserting a line break. Set to 0 to disable line breaks.
+                    </p>
+                </div>
+            </div>
+            
+            <div class="divider">Model Prompting</div>
+            <div class="form-control">
+                <label class="label">
+                    <span class="label-text">Prompt for the model</span>
+                </label>
+                <textarea class="textarea textarea-bordered h-24" placeholder="Enter a prompt to guide the model's style or specify how to spell unfamiliar words" id="model-prompt" maxlength="896"></textarea>
+                <p class="text-xs text-gray-500 mt-1">
+                    Limited to 896 characters (recommended ~500). Use this to guide the model's style or specify how to spell unfamiliar words.
+                </p>
+            </div>
+            
+            <button class="btn btn-primary w-full mt-4 mb-4" id="save-advanced-settings">Save Advanced Settings</button>
+        </div>
+    </div>
+    
+    <footer class="footer p-4 bg-neutral text-neutral-content flex flex-row justify-center">
+        <div class="grid grid-flow-col" id="buttons">
+            <a href="https://igerman.cc/" target="_blank" class="btn btn-primary btn-wide btn-sm max-w-24">
+                Contact
+            </a>
+            <a href="https://ko-fi.com/D1D2BJ5D6" target="_blank" class="btn btn-secondary btn-wide btn-sm max-w-24">
+                Donate
+            </a>
+            <a href="https://buttercup.igerman.cc" target="_blank" class="btn btn-wide btn-sm max-w-24">
+                Cache DB
+            </a>
+        </div>
+    </footer>
+</body>
+
+<script src="assets/js/buttons.js"></script>
+
+</html>
