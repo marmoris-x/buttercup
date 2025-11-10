@@ -354,16 +354,21 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
         const originalFetch = window.fetch;
         window.fetch.magic = 'buttercup';
         window.fetch = async (input, init) => {
-            const url = typeof input === 'string' ? input : input.url;
+            const url = typeof input === 'string' ? input : input?.url;
+
+            // If no valid URL, pass through to original fetch
+            if (!url) {
+                return originalFetch(input, init);
+            }
 
             // Log all fetch requests to help debug caption loading
-            if (url && (url.includes('timedtext') || url.includes('caption') || url.includes('buttercup'))) {
+            if (url.includes('timedtext') || url.includes('caption') || url.includes('buttercup')) {
                 console.info('[Buttercup] Fetch request detected:', url.substring(0, 150));
             }
 
             // Intercept ALL caption requests with fmt=json3 if we have custom subtitles
             // YouTube ignores our baseUrl and builds its own URL
-            const isTimedTextRequest = url && url.includes('timedtext') && url.includes('fmt=json3');
+            const isTimedTextRequest = url.includes('timedtext') && url.includes('fmt=json3');
 
             if (isTimedTextRequest && customSubtitle !== null) {
                 console.info('[Buttercup] Intercepting caption fetch request, returning Buttercup captions');
