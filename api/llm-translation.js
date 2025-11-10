@@ -51,6 +51,12 @@ class LLMTranslation {
             const translatedText = translatedTexts[index];
             const originalSegmentCount = segmentStructures[index];
 
+            // Safety check: if translatedText is undefined, use original text
+            if (!translatedText) {
+                console.error(`[LLMTranslation] ⚠ Missing translation for event ${index}, using original text`);
+                return event;
+            }
+
             // Split the translated text back using the ||| separator
             // KEEP newlines (\n) to preserve 2-line subtitle structure!
             const lines = translatedText.split('|||')
@@ -274,20 +280,43 @@ Translated subtitles (output exactly ${texts.length} lines, one per line, KEEPIN
 
         let translatedText = data.candidates[0].content.parts[0].text;
 
-        // Gemini uses ||| as separator, but we need \n for multi-line subtitles
-        // Replace all ||| with \n to preserve 2-line subtitle structure
-        translatedText = translatedText.replace(/\|\|\|/g, '\n');
+        console.log('[LLMTranslation] Raw Gemini text (first 500 chars):', translatedText.substring(0, 500));
 
-        // Now split by double newlines to separate segments
-        // (Gemini may add extra newlines between segments)
-        const segments = translatedText
-            .split(/\n\n+/)  // Split by 2 or more newlines
-            .map(seg => seg.trim())
-            .filter(seg => seg.length > 0)
-            .map(seg => seg.replace(/^\d+\.\s*/, ''));  // Remove leading "1. ", "2. ", etc.
+        // Parse the response - Gemini returns numbered lines like "1. text\n2. text\n3. text"
+        // First, split by newlines to get individual lines
+        let lines = translatedText
+            .split('\n')
+            .map(line => line.trim())
+            .filter(line => line.length > 0);
+
+        console.log(`[LLMTranslation] Found ${lines.length} non-empty lines`);
+
+        // Now process each line - remove numbering and handle ||| separators
+        const segments = lines
+            .map(line => {
+                // Remove leading numbering like "1. ", "2. ", etc.
+                let cleaned = line.replace(/^\d+\.\s*/, '');
+                // Keep ||| as is - it will be handled by the caller
+                return cleaned;
+            })
+            .filter(seg => seg.length > 0);
+
+        console.log(`[LLMTranslation] Processed ${segments.length} segments`);
 
         if (segments.length !== expectedCount) {
             console.warn(`[LLMTranslation] Expected ${expectedCount} segments, got ${segments.length}`);
+
+            // If we got significantly fewer segments, the response might be in a single block
+            // Try to split by numbered patterns
+            if (segments.length === 1 && expectedCount > 1) {
+                console.warn('[LLMTranslation] Attempting to split single-block response by numbered patterns');
+                const numberedPattern = /(\d+)\.\s+/g;
+                const parts = segments[0].split(numberedPattern).filter(part => !part.match(/^\d+$/));
+                if (parts.length >= expectedCount / 2) {
+                    console.log(`[LLMTranslation] Successfully split into ${parts.length} parts`);
+                    return parts.slice(0, expectedCount);
+                }
+            }
         }
 
         return segments;
