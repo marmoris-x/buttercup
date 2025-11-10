@@ -141,14 +141,6 @@ class GroqAPI {
                 formData.append('prompt', options.prompt);
             }
 
-            // Add timestamp granularities
-            formData.append('timestamp_granularities[]', 'segment');
-
-            // Add word-level timestamps if enabled in options
-            if (options.wordTimestamps) {
-                formData.append('timestamp_granularities[]', 'word');
-            }
-
             console.info('[Buttercup] Sending transcription request with parameters:', params);
 
             const response = await fetch(`${this.baseUrl}/transcriptions`, {
@@ -245,14 +237,6 @@ class GroqAPI {
 
             if (options.prompt) {
                 formData.append('prompt', options.prompt);
-            }
-
-            // Add timestamp granularities
-            formData.append('timestamp_granularities[]', 'segment');
-
-            // Add word-level timestamps if enabled in options
-            if (options.wordTimestamps) {
-                formData.append('timestamp_granularities[]', 'word');
             }
 
             console.info('[Buttercup] Sending translation request with parameters:', params);
