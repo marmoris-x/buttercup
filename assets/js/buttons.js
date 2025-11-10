@@ -748,12 +748,13 @@ viewEditTranscript.addEventListener('click', () => {
                 const videoId = currentVideoIdEl.textContent;
 
                 if (transcripts[videoId]) {
+                    // Update both srtData and captionData (buttercup.js expects captionData, not youtubeFormat)
                     transcripts[videoId].srtData = newSrtData;
-                    transcripts[videoId].youtubeFormat = youtubeFormat;
+                    transcripts[videoId].captionData = youtubeFormat;
 
                     chrome.storage.local.set({ buttercup_transcripts: transcripts }, () => {
                         currentTranscriptData.srtData = newSrtData;
-                        currentTranscriptData.youtubeFormat = youtubeFormat;
+                        currentTranscriptData.captionData = youtubeFormat;
                         showAlert('SRT updated successfully. Reloading page...', 'success');
                         document.body.removeChild(modal);
 
