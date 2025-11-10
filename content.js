@@ -26,6 +26,11 @@ const sidebarScript = document.createElement('script');
 sidebarScript.src = chrome.runtime.getURL('summary-sidebar.js');
 document.documentElement.prepend(sidebarScript);
 
+// Inject the progress indicator script
+const progressScript = document.createElement('script');
+progressScript.src = chrome.runtime.getURL('progress-indicator.js');
+document.documentElement.prepend(progressScript);
+
 // Then inject the main script
 const mainScript = document.createElement('script');
 mainScript.src = chrome.runtime.getURL('buttercup.js');
@@ -45,7 +50,14 @@ chrome.storage.sync.get([
     'buttercup_prompt',
     'buttercup_language',
     'buttercup_temperature',
-    'buttercup_response_format'
+    'buttercup_response_format',
+    'buttercup_caption_font_size',
+    'buttercup_caption_position',
+    'buttercup_caption_font_color',
+    'buttercup_caption_bg_color',
+    'buttercup_caption_bg_opacity',
+    'buttercup_caption_font_family',
+    'buttercup_auto_transcribe'
 ], function (result) {
     if (chrome.runtime.lastError) {
         console.error('[Buttercup] Error loading settings:', chrome.runtime.lastError);
@@ -105,6 +117,35 @@ chrome.storage.sync.get([
         defaultSettings.buttercup_response_format = 'verbose_json';
     }
 
+    // Caption overlay defaults
+    if (result.buttercup_caption_font_size === undefined) {
+        defaultSettings.buttercup_caption_font_size = 22;
+    }
+
+    if (result.buttercup_caption_position === undefined) {
+        defaultSettings.buttercup_caption_position = 'bottom';
+    }
+
+    if (result.buttercup_caption_font_color === undefined) {
+        defaultSettings.buttercup_caption_font_color = '#ffffff';
+    }
+
+    if (result.buttercup_caption_bg_color === undefined) {
+        defaultSettings.buttercup_caption_bg_color = '#080808';
+    }
+
+    if (result.buttercup_caption_bg_opacity === undefined) {
+        defaultSettings.buttercup_caption_bg_opacity = 0.90;
+    }
+
+    if (result.buttercup_caption_font_family === undefined) {
+        defaultSettings.buttercup_caption_font_family = '"YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, sans-serif';
+    }
+
+    if (result.buttercup_auto_transcribe === undefined) {
+        defaultSettings.buttercup_auto_transcribe = false; // Default: disabled for safety
+    }
+
     // Set all defaults in a single operation
     if (Object.keys(defaultSettings).length > 0) {
         chrome.storage.sync.set(defaultSettings, function () {
@@ -160,6 +201,14 @@ document.addEventListener('requestButtercupDownloadSrt', function () {
     });
 });
 
+document.addEventListener('requestButtercupAutoTranscribe', function () {
+    chrome.storage.sync.get(['buttercup_auto_transcribe'], function (result) {
+        const autoTranscribe = result.buttercup_auto_transcribe || false;
+        // Send the value back to the page
+        document.dispatchEvent(new CustomEvent('responseButtercupAutoTranscribe', { detail: autoTranscribe }));
+    });
+});
+
 // Listen for API settings requests
 document.addEventListener('requestButtercupApiSettings', function () {
     chrome.storage.sync.get([
@@ -195,6 +244,30 @@ document.addEventListener('requestButtercupApiSettings', function () {
                 llmProvider: result.buttercup_llm_provider || 'openai',
                 llmApiKey: result.buttercup_llm_api_key || '',
                 llmModel: result.buttercup_llm_model || ''
+            }
+        }));
+    });
+});
+
+// Listen for caption overlay settings requests
+document.addEventListener('requestButtercupCaptionSettings', function () {
+    chrome.storage.sync.get([
+        'buttercup_caption_font_size',
+        'buttercup_caption_position',
+        'buttercup_caption_font_color',
+        'buttercup_caption_bg_color',
+        'buttercup_caption_bg_opacity',
+        'buttercup_caption_font_family'
+    ], function (result) {
+        // Send the values back to the page
+        document.dispatchEvent(new CustomEvent('responseButtercupCaptionSettings', {
+            detail: {
+                fontSize: result.buttercup_caption_font_size || 22,
+                position: result.buttercup_caption_position || 'bottom',
+                fontColor: result.buttercup_caption_font_color || '#ffffff',
+                backgroundColor: result.buttercup_caption_bg_color || '#080808',
+                backgroundOpacity: result.buttercup_caption_bg_opacity !== undefined ? result.buttercup_caption_bg_opacity : 0.90,
+                fontFamily: result.buttercup_caption_font_family || '"YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, sans-serif'
             }
         }));
     });

@@ -261,6 +261,242 @@ class TranscriptStorage {
 
         return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`;
     }
+
+    /**
+     * Generate VTT (WebVTT) format from caption data
+     * @param {Object} captionData - Caption data with events
+     * @returns {string} - VTT formatted string
+     */
+    generateVTT(captionData) {
+        if (!captionData || !captionData.events) {
+            return '';
+        }
+
+        let vtt = 'WEBVTT\n\n';
+
+        for (const event of captionData.events) {
+            const startTime = this.formatVTTTime(event.tStartMs);
+            const endTime = this.formatVTTTime(event.tStartMs + event.dDurationMs);
+            const text = event.segs.map(seg => seg.utf8).join('');
+
+            vtt += `${startTime} --> ${endTime}\n`;
+            vtt += `${text}\n\n`;
+        }
+
+        return vtt.trim();
+    }
+
+    /**
+     * Format time in milliseconds to VTT time format (HH:MM:SS.mmm)
+     */
+    formatVTTTime(ms) {
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+        const milliseconds = ms % 1000;
+
+        return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+    }
+
+    /**
+     * Generate plain text format from caption data
+     * @param {Object} captionData - Caption data with events
+     * @param {boolean} includeTimestamps - Whether to include timestamps (default: false)
+     * @returns {string} - Plain text string
+     */
+    generateTXT(captionData, includeTimestamps = false) {
+        if (!captionData || !captionData.events) {
+            return '';
+        }
+
+        let txt = '';
+
+        for (const event of captionData.events) {
+            const text = event.segs.map(seg => seg.utf8).join('');
+
+            if (includeTimestamps) {
+                const timestamp = this.formatReadableTime(event.tStartMs);
+                txt += `[${timestamp}] ${text}\n`;
+            } else {
+                txt += `${text}\n`;
+            }
+        }
+
+        return txt.trim();
+    }
+
+    /**
+     * Format time in milliseconds to readable format (MM:SS)
+     */
+    formatReadableTime(ms) {
+        const totalSeconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+
+        return `${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`;
+    }
+
+    /**
+     * Generate JSON format from caption data
+     * @param {Object} captionData - Caption data with events
+     * @param {Object} metadata - Additional metadata (videoTitle, etc.)
+     * @returns {string} - JSON formatted string
+     */
+    generateJSON(captionData, metadata = {}) {
+        if (!captionData || !captionData.events) {
+            return '';
+        }
+
+        const jsonData = {
+            metadata: {
+                videoTitle: metadata.videoTitle || 'Unknown',
+                duration: metadata.duration || 'Unknown',
+                exportDate: new Date().toISOString(),
+                totalCaptions: captionData.events.length
+            },
+            captions: captionData.events.map((event, index) => ({
+                index: index + 1,
+                startTime: event.tStartMs,
+                endTime: event.tStartMs + event.dDurationMs,
+                startTimeFormatted: this.formatReadableTime(event.tStartMs),
+                endTimeFormatted: this.formatReadableTime(event.tStartMs + event.dDurationMs),
+                duration: event.dDurationMs,
+                text: event.segs.map(seg => seg.utf8).join('')
+            }))
+        };
+
+        return JSON.stringify(jsonData, null, 2);
+    }
+
+    /**
+     * Copy text to clipboard
+     * @param {string} text - Text to copy
+     * @returns {Promise<boolean>} - Success status
+     */
+    async copyToClipboard(text) {
+        try {
+            await navigator.clipboard.writeText(text);
+            console.info('[TranscriptStorage] ✓ Copied to clipboard');
+            return true;
+        } catch (error) {
+            console.error('[TranscriptStorage] Error copying to clipboard:', error);
+
+            // Fallback method for older browsers
+            try {
+                const textarea = document.createElement('textarea');
+                textarea.value = text;
+                textarea.style.position = 'fixed';
+                textarea.style.opacity = '0';
+                document.body.appendChild(textarea);
+                textarea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textarea);
+                console.info('[TranscriptStorage] ✓ Copied to clipboard (fallback method)');
+                return true;
+            } catch (fallbackError) {
+                console.error('[TranscriptStorage] Fallback copy failed:', fallbackError);
+                return false;
+            }
+        }
+    }
+
+    /**
+     * Download file with given content and filename
+     * @param {string} content - File content
+     * @param {string} filename - Filename
+     * @param {string} mimeType - MIME type (default: text/plain)
+     */
+    downloadFile(content, filename, mimeType = 'text/plain') {
+        try {
+            const blob = new Blob([content], { type: mimeType });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            console.info('[TranscriptStorage] ✓ File downloaded:', filename);
+            return true;
+        } catch (error) {
+            console.error('[TranscriptStorage] Error downloading file:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Export captions in specified format
+     * @param {Object} captionData - Caption data with events
+     * @param {string} format - Export format (srt, vtt, txt, json)
+     * @param {string} videoTitle - Video title for filename
+     * @param {Object} options - Additional options
+     * @returns {boolean} - Success status
+     */
+    exportCaptions(captionData, format, videoTitle, options = {}) {
+        const baseFilename = videoTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        let content = '';
+        let filename = '';
+        let mimeType = 'text/plain';
+
+        switch (format.toLowerCase()) {
+            case 'srt':
+                content = this.generateSRT(captionData);
+                filename = `${baseFilename}.srt`;
+                break;
+
+            case 'vtt':
+                content = this.generateVTT(captionData);
+                filename = `${baseFilename}.vtt`;
+                mimeType = 'text/vtt';
+                break;
+
+            case 'txt':
+                content = this.generateTXT(captionData, options.includeTimestamps || false);
+                filename = `${baseFilename}.txt`;
+                break;
+
+            case 'json':
+                content = this.generateJSON(captionData, { videoTitle });
+                filename = `${baseFilename}.json`;
+                mimeType = 'application/json';
+                break;
+
+            default:
+                console.error('[TranscriptStorage] Unknown export format:', format);
+                return false;
+        }
+
+        return this.downloadFile(content, filename, mimeType);
+    }
+
+    /**
+     * Get text content for clipboard (with format options)
+     * @param {Object} captionData - Caption data with events
+     * @param {string} format - Format (plain, timestamped, srt, vtt, json)
+     * @returns {string} - Formatted text
+     */
+    getClipboardContent(captionData, format = 'plain') {
+        switch (format.toLowerCase()) {
+            case 'plain':
+                return this.generateTXT(captionData, false);
+
+            case 'timestamped':
+                return this.generateTXT(captionData, true);
+
+            case 'srt':
+                return this.generateSRT(captionData);
+
+            case 'vtt':
+                return this.generateVTT(captionData);
+
+            case 'json':
+                return this.generateJSON(captionData);
+
+            default:
+                return this.generateTXT(captionData, false);
+        }
+    }
 }
 
 // Make available globally

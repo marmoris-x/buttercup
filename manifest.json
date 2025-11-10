@@ -23,6 +23,7 @@
                 "buttercup.js",
                 "caption-overlay.js",
                 "summary-sidebar.js",
+                "progress-indicator.js",
                 "api/cobalt.js",
                 "api/groq.js",
                 "api/config.js",

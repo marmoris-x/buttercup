@@ -29,6 +29,133 @@ class GroqAPI {
     }
 
     /**
+     * Retry a function with exponential backoff
+     * @param {Function} fn - The function to retry
+     * @param {number} maxRetries - Maximum number of retries (default: 3)
+     * @param {number} baseDelay - Base delay in milliseconds (default: 1000)
+     * @returns {Promise} - The result of the function
+     */
+    async retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
+        let lastError;
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                return await fn();
+            } catch (error) {
+                lastError = error;
+
+                // Don't retry on certain errors
+                if (this.shouldNotRetry(error)) {
+                    console.warn(`[Buttercup] Error is not retryable: ${error.message}`);
+                    throw error;
+                }
+
+                // If this was the last attempt, throw the error
+                if (attempt === maxRetries) {
+                    console.error(`[Buttercup] Max retries (${maxRetries}) reached. Giving up.`);
+                    throw error;
+                }
+
+                // Calculate delay with exponential backoff
+                const delay = baseDelay * Math.pow(2, attempt);
+                console.warn(`[Buttercup] Attempt ${attempt + 1} failed. Retrying in ${delay}ms... Error: ${error.message}`);
+
+                // Wait before retrying
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+
+        throw lastError;
+    }
+
+    /**
+     * Check if an error should not be retried
+     * @param {Error} error - The error to check
+     * @returns {boolean} - True if the error should not be retried
+     */
+    shouldNotRetry(error) {
+        const message = error.message.toLowerCase();
+
+        // Don't retry on authentication errors
+        if (message.includes('401') || message.includes('unauthorized') || message.includes('invalid api key')) {
+            return true;
+        }
+
+        // Don't retry on invalid request errors (400, 422)
+        if (message.includes('400') || message.includes('422') || message.includes('invalid')) {
+            return true;
+        }
+
+        // Don't retry on file errors
+        if (message.includes('file is empty') || message.includes('invalid audio file')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Parse API error and provide user-friendly message
+     * @param {Response} response - The fetch response
+     * @param {string} errorText - The error text from the response
+     * @returns {Error} - A formatted error with helpful message
+     */
+    parseApiError(response, errorText) {
+        const status = response.status;
+        let message = '';
+        let suggestion = '';
+
+        // Try to parse JSON error
+        try {
+            const errorData = JSON.parse(errorText);
+            if (errorData.error && errorData.error.message) {
+                message = errorData.error.message;
+            }
+        } catch (e) {
+            // Not JSON, use raw text
+            message = errorText;
+        }
+
+        // Provide specific messages based on status code
+        switch (status) {
+            case 400:
+                suggestion = 'Check your request parameters. The audio file might be corrupted or in an unsupported format.';
+                break;
+            case 401:
+                suggestion = 'Your API key is invalid or expired. Please check your Groq API key in the extension settings.';
+                break;
+            case 403:
+                suggestion = 'Access forbidden. Your API key might not have permission for this operation.';
+                break;
+            case 404:
+                suggestion = 'API endpoint not found. This might be a temporary issue with the Groq API.';
+                break;
+            case 413:
+                suggestion = 'Audio file is too large. Try a shorter video or reduce the audio quality.';
+                break;
+            case 429:
+                suggestion = 'Rate limit exceeded. Please wait a few moments before trying again.';
+                break;
+            case 500:
+            case 502:
+            case 503:
+            case 504:
+                suggestion = 'Groq API server error. This is usually temporary - please try again in a few moments.';
+                break;
+            default:
+                suggestion = 'An unexpected error occurred. Please try again.';
+        }
+
+        const fullMessage = `Groq API Error (${status}): ${message}\n\n💡 ${suggestion}`;
+        const error = new Error(fullMessage);
+        error.status = status;
+        error.originalMessage = message;
+        error.suggestion = suggestion;
+
+        return error;
+    }
+
+    /**
      * Set the API key
      * @param {string} apiKey - The API key for Groq
      */
@@ -84,17 +211,21 @@ class GroqAPI {
             return audioFile;
         }
         
-        // If it's a string (URL), download it
+        // If it's a string (URL), download it with retry logic
         if (typeof audioFile === 'string') {
             try {
-                const response = await fetch(audioFile);
-                if (!response.ok) {
-                    throw new Error(`Failed to download file: ${response.status} ${response.statusText}`);
-                }
-                return await response.blob();
+                return await this.retryWithBackoff(async () => {
+                    const response = await fetch(audioFile);
+                    if (!response.ok) {
+                        const error = new Error(`Failed to download file: ${response.status} ${response.statusText}`);
+                        error.status = response.status;
+                        throw error;
+                    }
+                    return await response.blob();
+                }, 3, 1000); // 3 retries with 1 second base delay
             } catch (error) {
-                console.error('[Buttercup] Error downloading file:', error);
-                throw error;
+                console.error('[Buttercup] Error downloading file after retries:', error);
+                throw new Error(`Failed to download audio file: ${error.message}. Please check your network connection.`);
             }
         }
         
@@ -173,25 +304,30 @@ class GroqAPI {
 
             console.info('[Buttercup] Sending transcription request with parameters:', params);
 
-            const response = await fetch(`${this.baseUrl}/transcriptions`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`
-                },
-                body: formData
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('[Buttercup] Groq API error response:', {
-                    status: response.status,
-                    statusText: response.statusText,
-                    error: errorText
+            // Wrap API call in retry logic
+            const result = await this.retryWithBackoff(async () => {
+                const response = await fetch(`${this.baseUrl}/transcriptions`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${this.apiKey}`
+                    },
+                    body: formData
                 });
-                throw new Error(`Groq API error: ${response.status} - ${errorText}`);
-            }
 
-            const result = await response.json();
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('[Buttercup] Groq API error response:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        error: errorText
+                    });
+
+                    // Parse error with helpful message
+                    throw this.parseApiError(response, errorText);
+                }
+
+                return await response.json();
+            }, 3, 2000); // 3 retries, starting with 2 second delay
 
             // Log detailed response information
             console.info('[Buttercup] Groq API transcription response:', {
@@ -289,25 +425,30 @@ class GroqAPI {
 
             console.info('[Buttercup] Sending translation request with parameters:', params);
 
-            const response = await fetch(`${this.baseUrl}/translations`, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${this.apiKey}`
-                },
-                body: formData
-            });
-
-            if (!response.ok) {
-                const errorText = await response.text();
-                console.error('[Buttercup] Groq API error response:', {
-                    status: response.status,
-                    statusText: response.statusText,
-                    error: errorText
+            // Wrap API call in retry logic
+            const result = await this.retryWithBackoff(async () => {
+                const response = await fetch(`${this.baseUrl}/translations`, {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${this.apiKey}`
+                    },
+                    body: formData
                 });
-                throw new Error(`Groq API error: ${response.status} - ${errorText}`);
-            }
 
-            const result = await response.json();
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('[Buttercup] Groq API error response:', {
+                        status: response.status,
+                        statusText: response.statusText,
+                        error: errorText
+                    });
+
+                    // Parse error with helpful message
+                    throw this.parseApiError(response, errorText);
+                }
+
+                return await response.json();
+            }, 3, 2000); // 3 retries, starting with 2 second delay
 
             // Log detailed response information
             console.info('[Buttercup] Groq API translation response:', {

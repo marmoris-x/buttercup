@@ -13,18 +13,129 @@ class CustomCaptionOverlay {
         this.isVisible = startVisible; // Start visible by default (auto-loaded transcripts should show immediately)
         this.updateInterval = null;
 
+        // Default customization settings (will be loaded from storage)
+        this.settings = {
+            fontSize: 22,              // pixels
+            position: 'bottom',        // 'top', 'middle', 'bottom'
+            fontColor: '#ffffff',      // hex color
+            backgroundColor: '#080808', // hex color
+            backgroundOpacity: 0.90,   // 0.0 - 1.0
+            fontFamily: '"YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, sans-serif'
+        };
+
         console.info('[CaptionOverlay] Initializing with', this.captions.length, 'caption events, visible:', this.isVisible);
         this.init();
     }
 
     init() {
-        // Warte auf Video-Element
-        this.waitForVideo().then(() => {
-            console.info('[CaptionOverlay] Video found, creating overlay');
-            this.createOverlay();
-            this.startTracking();
-            this.setupToggleListener();
+        // Load settings first, then create overlay
+        this.loadSettings().then(() => {
+            // Warte auf Video-Element
+            this.waitForVideo().then(() => {
+                console.info('[CaptionOverlay] Video found, creating overlay');
+                this.createOverlay();
+                this.startTracking();
+                this.setupToggleListener();
+                this.setupSettingsListener();
+            });
         });
+    }
+
+    /**
+     * Load caption overlay settings from Chrome storage
+     */
+    async loadSettings() {
+        return new Promise((resolve) => {
+            // Request settings from content script
+            document.addEventListener('responseButtercupCaptionSettings', (e) => {
+                if (e.detail) {
+                    this.settings = {
+                        fontSize: e.detail.fontSize || 22,
+                        position: e.detail.position || 'bottom',
+                        fontColor: e.detail.fontColor || '#ffffff',
+                        backgroundColor: e.detail.backgroundColor || '#080808',
+                        backgroundOpacity: e.detail.backgroundOpacity !== undefined ? e.detail.backgroundOpacity : 0.90,
+                        fontFamily: e.detail.fontFamily || '"YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, sans-serif'
+                    };
+                    console.info('[CaptionOverlay] Settings loaded:', this.settings);
+                }
+                resolve();
+            }, { once: true });
+
+            // Request settings
+            document.dispatchEvent(new CustomEvent('requestButtercupCaptionSettings'));
+
+            // Fallback timeout
+            setTimeout(resolve, 1000);
+        });
+    }
+
+    /**
+     * Listen for settings changes and update overlay
+     */
+    setupSettingsListener() {
+        document.addEventListener('buttercupCaptionSettingsChanged', (e) => {
+            if (e.detail) {
+                this.settings = { ...this.settings, ...e.detail };
+                console.info('[CaptionOverlay] Settings updated:', this.settings);
+                this.applySettings();
+            }
+        });
+    }
+
+    /**
+     * Apply current settings to the overlay
+     */
+    applySettings() {
+        if (!this.overlay || !this.captionElement) return;
+
+        // Update overlay position
+        const positions = {
+            'top': '50px',
+            'middle': '50%',
+            'bottom': '90px'
+        };
+
+        this.overlay.style.bottom = positions[this.settings.position] || '90px';
+
+        if (this.settings.position === 'middle') {
+            this.overlay.style.transform = 'translateY(-50%)';
+            this.overlay.style.top = '50%';
+            this.overlay.style.bottom = 'auto';
+        } else {
+            this.overlay.style.transform = '';
+            this.overlay.style.top = this.settings.position === 'top' ? '50px' : 'auto';
+            this.overlay.style.bottom = this.settings.position === 'bottom' ? '90px' : 'auto';
+        }
+
+        // Update caption element styles
+        this.captionElement.style.fontSize = `${this.settings.fontSize}px`;
+        this.captionElement.style.color = this.settings.fontColor;
+
+        // Convert hex to rgba for background with opacity
+        const bgColor = this.hexToRgba(this.settings.backgroundColor, this.settings.backgroundOpacity);
+        this.captionElement.style.background = bgColor;
+        this.captionElement.style.fontFamily = this.settings.fontFamily;
+
+        console.info('[CaptionOverlay] Settings applied to overlay');
+    }
+
+    /**
+     * Convert hex color to rgba
+     * @param {string} hex - Hex color (#000000)
+     * @param {number} opacity - Opacity (0.0 - 1.0)
+     * @returns {string} - RGBA string
+     */
+    hexToRgba(hex, opacity) {
+        // Remove # if present
+        hex = hex.replace('#', '');
+
+        // Parse RGB
+        const r = parseInt(hex.substring(0, 2), 16);
+        const g = parseInt(hex.substring(2, 4), 16);
+        const b = parseInt(hex.substring(4, 6), 16);
+
+        return `rgba(${r}, ${g}, ${b}, ${opacity})`;
     }
 
     waitForVideo() {
@@ -51,9 +162,22 @@ class CustomCaptionOverlay {
         // Erstelle Overlay-Container
         this.overlay = document.createElement('div');
         this.overlay.id = 'buttercup-caption-overlay';
+
+        // Apply position-based styles
+        let overlayPosition = {};
+        if (this.settings.position === 'top') {
+            overlayPosition = { top: '50px', bottom: 'auto' };
+        } else if (this.settings.position === 'middle') {
+            overlayPosition = { top: '50%', bottom: 'auto', transform: 'translateY(-50%)' };
+        } else {
+            overlayPosition = { bottom: '90px', top: 'auto' };
+        }
+
         this.overlay.style.cssText = `
             position: absolute;
-            bottom: 90px;
+            ${overlayPosition.top ? `top: ${overlayPosition.top};` : ''}
+            ${overlayPosition.bottom ? `bottom: ${overlayPosition.bottom};` : ''}
+            ${overlayPosition.transform ? `transform: ${overlayPosition.transform};` : ''}
             left: 0;
             right: 0;
             text-align: center;
@@ -63,17 +187,19 @@ class CustomCaptionOverlay {
             display: block;
         `;
 
-        // Erstelle Caption-Element
+        // Erstelle Caption-Element with custom settings
         this.captionElement = document.createElement('div');
+        const bgColor = this.hexToRgba(this.settings.backgroundColor, this.settings.backgroundOpacity);
+
         this.captionElement.style.cssText = `
             display: none;
-            background: rgba(8, 8, 8, 0.90);
-            color: #ffffff;
+            background: ${bgColor};
+            color: ${this.settings.fontColor};
             padding: 8px 16px;
             border-radius: 3px;
-            font-size: 22px;
+            font-size: ${this.settings.fontSize}px;
             line-height: 1.4;
-            font-family: "YouTube Noto", Roboto, "Arial Unicode Ms", Arial, Helvetica, Verdana, sans-serif;
+            font-family: ${this.settings.fontFamily};
             text-shadow: 0 0 2px rgba(0,0,0,.5), 0 1px 2px rgba(0,0,0,.5), 0 0 2px rgba(0,0,0,.5);
             white-space: pre-wrap;
             word-wrap: break-word;
@@ -84,7 +210,7 @@ class CustomCaptionOverlay {
         this.overlay.appendChild(this.captionElement);
         playerContainer.appendChild(this.overlay);
 
-        console.info('[CaptionOverlay] ✓ Overlay created and injected');
+        console.info('[CaptionOverlay] ✓ Overlay created with custom settings:', this.settings);
     }
 
     startTracking() {

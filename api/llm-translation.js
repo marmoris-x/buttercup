@@ -11,6 +11,133 @@ class LLMTranslation {
     }
 
     /**
+     * Retry a function with exponential backoff
+     * @param {Function} fn - The function to retry
+     * @param {number} maxRetries - Maximum number of retries (default: 3)
+     * @param {number} baseDelay - Base delay in milliseconds (default: 1000)
+     * @returns {Promise} - The result of the function
+     */
+    async retryWithBackoff(fn, maxRetries = 3, baseDelay = 1000) {
+        let lastError;
+
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+            try {
+                return await fn();
+            } catch (error) {
+                lastError = error;
+
+                // Don't retry on certain errors
+                if (this.shouldNotRetry(error)) {
+                    console.warn(`[LLMTranslation] Error is not retryable: ${error.message}`);
+                    throw error;
+                }
+
+                // If this was the last attempt, throw the error
+                if (attempt === maxRetries) {
+                    console.error(`[LLMTranslation] Max retries (${maxRetries}) reached. Giving up.`);
+                    throw error;
+                }
+
+                // Calculate delay with exponential backoff
+                const delay = baseDelay * Math.pow(2, attempt);
+                console.warn(`[LLMTranslation] Attempt ${attempt + 1} failed. Retrying in ${delay}ms... Error: ${error.message}`);
+
+                // Wait before retrying
+                await new Promise(resolve => setTimeout(resolve, delay));
+            }
+        }
+
+        throw lastError;
+    }
+
+    /**
+     * Check if an error should not be retried
+     * @param {Error} error - The error to check
+     * @returns {boolean} - True if the error should not be retried
+     */
+    shouldNotRetry(error) {
+        const message = error.message.toLowerCase();
+
+        // Don't retry on authentication errors
+        if (message.includes('401') || message.includes('unauthorized') || message.includes('invalid api key')) {
+            return true;
+        }
+
+        // Don't retry on invalid request errors (400, 422)
+        if (message.includes('400') || message.includes('422')) {
+            return true;
+        }
+
+        // Don't retry on model not found
+        if (message.includes('404') || message.includes('model not found')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Parse LLM API error and provide user-friendly message
+     * @param {string} provider - The LLM provider (openai, gemini, claude, openrouter)
+     * @param {Response} response - The fetch response
+     * @param {string} errorText - The error text from the response
+     * @returns {Error} - A formatted error with helpful message
+     */
+    parseLLMError(provider, response, errorText) {
+        const status = response.status;
+        let message = errorText;
+        let suggestion = '';
+
+        // Try to parse JSON error
+        try {
+            const errorData = JSON.parse(errorText);
+            if (errorData.error && errorData.error.message) {
+                message = errorData.error.message;
+            } else if (errorData.error) {
+                message = errorData.error;
+            }
+        } catch (e) {
+            // Not JSON, use raw text
+        }
+
+        // Provide specific messages based on status code
+        switch (status) {
+            case 400:
+                suggestion = 'Invalid request. The text might be too long or contain unsupported characters. Try reducing the text length.';
+                break;
+            case 401:
+                suggestion = `Your ${provider} API key is invalid or expired. Please check your API key in the extension settings.`;
+                break;
+            case 403:
+                suggestion = `Access forbidden. Your ${provider} API key might not have permission for this model.`;
+                break;
+            case 404:
+                suggestion = `Model not found. The model "${this.model}" might not be available for ${provider}. Check the model name in settings.`;
+                break;
+            case 429:
+                suggestion = `Rate limit exceeded for ${provider}. Please wait a few moments before trying again, or upgrade your API plan.`;
+                break;
+            case 500:
+            case 502:
+            case 503:
+            case 504:
+                suggestion = `${provider} server error. This is usually temporary - please try again in a few moments.`;
+                break;
+            default:
+                suggestion = 'An unexpected error occurred. Please try again.';
+        }
+
+        const fullMessage = `${provider.toUpperCase()} Translation Error (${status}): ${message}\n\n💡 ${suggestion}`;
+        const error = new Error(fullMessage);
+        error.status = status;
+        error.originalMessage = message;
+        error.suggestion = suggestion;
+        error.provider = provider;
+
+        return error;
+    }
+
+    /**
      * Translate caption events to target language
      * @param {Array} captionEvents - Array of caption events with segs
      * @param {string} targetLanguage - Target language (e.g., "German", "Spanish", "French")
@@ -224,151 +351,163 @@ Output ${texts.length} lines below (numbered format is fine):`;
     async translateWithOpenAI(prompt, expectedCount) {
         console.info('[LLMTranslation] Using OpenAI API');
 
-        const response = await fetch('https://api.openai.com/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey}`
-            },
-            body: JSON.stringify({
-                model: this.model,
-                messages: [
-                    { role: 'system', content: 'You are a professional subtitle translator. Output exactly the requested number of lines, one translation per line. Use the full video context to ensure accurate translations.' },
-                    { role: 'user', content: prompt }
-                ],
-                max_completion_tokens: 128000
-            })
-        });
+        // Wrap API call in retry logic
+        return await this.retryWithBackoff(async () => {
+            const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.apiKey}`
+                },
+                body: JSON.stringify({
+                    model: this.model,
+                    messages: [
+                        { role: 'system', content: 'You are a professional subtitle translator. Output exactly the requested number of lines, one translation per line. Use the full video context to ensure accurate translations.' },
+                        { role: 'user', content: prompt }
+                    ],
+                    max_completion_tokens: 128000
+                })
+            });
 
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`OpenAI API error: ${response.status} - ${error}`);
-        }
+            if (!response.ok) {
+                const error = await response.text();
+                throw this.parseLLMError('openai', response, error);
+            }
 
-        const data = await response.json();
-        const translatedText = data.choices[0].message.content;
+            const data = await response.json();
+            const translatedText = data.choices[0].message.content;
 
-        return this.parseTranslationResponse(translatedText, expectedCount);
+            return this.parseTranslationResponse(translatedText, expectedCount);
+        }, 3, 2000); // 3 retries, starting with 2 second delay
     }
 
     async translateWithGemini(prompt, expectedCount) {
         console.info('[LLMTranslation] Using Gemini API');
 
-        const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
+        // Wrap API call in retry logic
+        return await this.retryWithBackoff(async () => {
+            const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
 
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                contents: [{
-                    parts: [{
-                        text: prompt
-                    }]
-                }],
-                generationConfig: {
-                    temperature: 0.3,
-                    maxOutputTokens: 65000
+            const response = await fetch(url, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
                 },
-                safetySettings: [
-                    { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
-                    { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
-                    { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
-                    { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
-                ]
-            })
-        });
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: prompt
+                        }]
+                    }],
+                    generationConfig: {
+                        temperature: 0.3,
+                        maxOutputTokens: 65000
+                    },
+                    safetySettings: [
+                        { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                        { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                        { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                        { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+                    ]
+                })
+            });
 
-        if (!response.ok) {
-            const error = await response.text();
-            console.error('[LLMTranslation] Gemini API error response:', error);
-            throw new Error(`Gemini API error: ${response.status} - ${error}`);
-        }
+            if (!response.ok) {
+                const error = await response.text();
+                console.error('[LLMTranslation] Gemini API error response:', error);
+                throw this.parseLLMError('gemini', response, error);
+            }
 
-        const data = await response.json();
-        console.log('[LLMTranslation] Gemini response:', JSON.stringify(data, null, 2));
+            const data = await response.json();
+            console.log('[LLMTranslation] Gemini response:', JSON.stringify(data, null, 2));
 
-        // Check if response has the expected structure
-        if (!data.candidates || !data.candidates[0]) {
-            console.error('[LLMTranslation] Unexpected Gemini response structure:', data);
-            throw new Error(`Gemini returned unexpected response. Check if prompt is too long or contains invalid characters. Response: ${JSON.stringify(data)}`);
-        }
+            // Check if response has the expected structure
+            if (!data.candidates || !data.candidates[0]) {
+                console.error('[LLMTranslation] Unexpected Gemini response structure:', data);
+                throw new Error(`Gemini returned unexpected response. Check if prompt is too long or contains invalid characters. Response: ${JSON.stringify(data)}`);
+            }
 
-        if (!data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
-            console.error('[LLMTranslation] Gemini response missing content:', data);
-            throw new Error(`Gemini response missing content. Finish reason: ${data.candidates[0].finishReason || 'unknown'}`);
-        }
+            if (!data.candidates[0].content || !data.candidates[0].content.parts || !data.candidates[0].content.parts[0]) {
+                console.error('[LLMTranslation] Gemini response missing content:', data);
+                throw new Error(`Gemini response missing content. Finish reason: ${data.candidates[0].finishReason || 'unknown'}`);
+            }
 
-        const translatedText = data.candidates[0].content.parts[0].text;
-        console.log('[LLMTranslation] Raw Gemini text (first 500 chars):', translatedText.substring(0, 500));
+            const translatedText = data.candidates[0].content.parts[0].text;
+            console.log('[LLMTranslation] Raw Gemini text (first 500 chars):', translatedText.substring(0, 500));
 
-        return this.parseTranslationResponse(translatedText, expectedCount);
+            return this.parseTranslationResponse(translatedText, expectedCount);
+        }, 3, 2000); // 3 retries, starting with 2 second delay
     }
 
     async translateWithClaude(prompt, expectedCount) {
         console.info('[LLMTranslation] Using Claude API');
 
-        const response = await fetch('https://api.anthropic.com/v1/messages', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': this.apiKey,
-                'anthropic-version': '2023-06-01'
-            },
-            body: JSON.stringify({
-                model: this.model,
-                max_tokens: 4000,
-                temperature: 0.3,
-                messages: [{
-                    role: 'user',
-                    content: prompt
-                }]
-            })
-        });
+        // Wrap API call in retry logic
+        return await this.retryWithBackoff(async () => {
+            const response = await fetch('https://api.anthropic.com/v1/messages', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'x-api-key': this.apiKey,
+                    'anthropic-version': '2023-06-01'
+                },
+                body: JSON.stringify({
+                    model: this.model,
+                    max_tokens: 4000,
+                    temperature: 0.3,
+                    messages: [{
+                        role: 'user',
+                        content: prompt
+                    }]
+                })
+            });
 
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`Claude API error: ${response.status} - ${error}`);
-        }
+            if (!response.ok) {
+                const error = await response.text();
+                throw this.parseLLMError('claude', response, error);
+            }
 
-        const data = await response.json();
-        const translatedText = data.content[0].text;
+            const data = await response.json();
+            const translatedText = data.content[0].text;
 
-        return this.parseTranslationResponse(translatedText, expectedCount);
+            return this.parseTranslationResponse(translatedText, expectedCount);
+        }, 3, 2000); // 3 retries, starting with 2 second delay
     }
 
     async translateWithOpenRouter(prompt, expectedCount) {
         console.info('[LLMTranslation] Using OpenRouter API');
 
-        const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${this.apiKey}`,
-                'HTTP-Referer': 'https://github.com/yourusername/buttercup',
-                'X-Title': 'Buttercup Subtitle Translator'
-            },
-            body: JSON.stringify({
-                model: this.model,
-                messages: [
-                    { role: 'system', content: 'You are a professional subtitle translator. Output exactly the requested number of lines, one translation per line. Use the full video context to ensure accurate translations.' },
-                    { role: 'user', content: prompt }
-                ],
-                temperature: 0.3,
-                max_tokens: 4000
-            })
-        });
+        // Wrap API call in retry logic
+        return await this.retryWithBackoff(async () => {
+            const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${this.apiKey}`,
+                    'HTTP-Referer': 'https://github.com/yourusername/buttercup',
+                    'X-Title': 'Buttercup Subtitle Translator'
+                },
+                body: JSON.stringify({
+                    model: this.model,
+                    messages: [
+                        { role: 'system', content: 'You are a professional subtitle translator. Output exactly the requested number of lines, one translation per line. Use the full video context to ensure accurate translations.' },
+                        { role: 'user', content: prompt }
+                    ],
+                    temperature: 0.3,
+                    max_tokens: 4000
+                })
+            });
 
-        if (!response.ok) {
-            const error = await response.text();
-            throw new Error(`OpenRouter API error: ${response.status} - ${error}`);
-        }
+            if (!response.ok) {
+                const error = await response.text();
+                throw this.parseLLMError('openrouter', response, error);
+            }
 
-        const data = await response.json();
-        const translatedText = data.choices[0].message.content;
+            const data = await response.json();
+            const translatedText = data.choices[0].message.content;
 
-        return this.parseTranslationResponse(translatedText, expectedCount);
+            return this.parseTranslationResponse(translatedText, expectedCount);
+        }, 3, 2000); // 3 retries, starting with 2 second delay
     }
 
     /**

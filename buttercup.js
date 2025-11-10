@@ -60,6 +60,10 @@ let TRANSLATE = null;
 let ENABLED = null;
 let DOWNLOAD_SRT = null;
 let USE_CACHE = true; // Default: enabled
+let AUTO_TRANSCRIBE = false; // Default: disabled for safety
+
+// Progress Indicator
+let progressIndicator = null;
 
 // Debounce utility function
 function debounce(func, delay) {
@@ -125,6 +129,16 @@ const getButtercupUseCache = new Promise((resolve) => {
     });
     // Request the value of buttercup_cache from the content script
     document.dispatchEvent(new CustomEvent('requestButtercupCache', {}));
+});
+
+const getButtercupAutoTranscribe = new Promise((resolve) => {
+    document.addEventListener('responseButtercupAutoTranscribe', function (e) {
+        AUTO_TRANSCRIBE = e.detail;
+        console.info('[Buttercup] Auto-Transcribe: ', AUTO_TRANSCRIBE);
+        resolve();
+    });
+    // Request the value of buttercup_auto_transcribe from the content script
+    document.dispatchEvent(new CustomEvent('requestButtercupAutoTranscribe', {}));
 });
 
 // Function to show error message snackbar
@@ -217,6 +231,14 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
     if (!ENABLED) {
         console.info('[Buttercup] Disabled, skipping everything');
         return;
+    }
+
+    // Initialize Progress Indicator
+    if (window.ProgressIndicator) {
+        progressIndicator = new window.ProgressIndicator();
+        console.info('[Buttercup] ✓ ProgressIndicator initialized');
+    } else {
+        console.error('[Buttercup] ✗ ProgressIndicator class not found!');
     }
 
     // IMPORTANT: Declare customSubtitle here BEFORE any usage
@@ -770,10 +792,45 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                                     console.info('[Buttercup] ✓ Summary sidebar displayed');
                                 }
                             }, 1000);
+                        } else if (AUTO_TRANSCRIBE && ENABLED) {
+                            // No cached transcript found, auto-start transcription if enabled
+                            console.info('[Buttercup] 🤖 Auto-transcription enabled, starting transcription...');
+
+                            // Wait for player to be ready before starting transcription
+                            setTimeout(() => {
+                                // Check if API keys are configured
+                                if (apiConfig && apiConfig.hasAllApiKeys()) {
+                                    startTranscriptionProcess();
+                                } else {
+                                    console.warn('[Buttercup] Auto-transcription cancelled: API keys not configured');
+                                }
+                            }, 2000); // Wait 2 seconds for player to be fully ready
                         }
                     } catch (error) {
                         console.error('[Buttercup] Error loading saved transcript:', error);
+
+                        // On error loading cache, try auto-transcription if enabled
+                        if (AUTO_TRANSCRIBE && ENABLED) {
+                            console.info('[Buttercup] 🤖 Auto-transcription enabled (fallback after cache error), starting transcription...');
+                            setTimeout(() => {
+                                if (apiConfig && apiConfig.hasAllApiKeys()) {
+                                    startTranscriptionProcess();
+                                } else {
+                                    console.warn('[Buttercup] Auto-transcription cancelled: API keys not configured');
+                                }
+                            }, 2000);
+                        }
                     }
+                } else if (!USE_CACHE && AUTO_TRANSCRIBE && ENABLED) {
+                    // Cache disabled but auto-transcription enabled
+                    console.info('[Buttercup] 🤖 Auto-transcription enabled (no cache), starting transcription...');
+                    setTimeout(() => {
+                        if (apiConfig && apiConfig.hasAllApiKeys()) {
+                            startTranscriptionProcess();
+                        } else {
+                            console.warn('[Buttercup] Auto-transcription cancelled: API keys not configured');
+                        }
+                    }, 2000);
                 } else if (!USE_CACHE) {
                     console.info('[Buttercup] Cache disabled, skipping auto-load');
                 }
@@ -804,6 +861,21 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
             const errorMsg = 'Groq API key not set. Please set up the Groq API key in the extension settings.';
             showErrorSnackbar(errorMsg);
             return;
+        }
+
+        // Initialize progress tracking
+        const steps = ['Downloading audio', 'Transcribing audio'];
+        if (llmTranslationEnabled && llmApiKey && llmModel && llmTargetLanguage) {
+            steps.push('Translating captions');
+        }
+        steps.push('Creating captions');
+        if (USE_CACHE) {
+            steps.push('Saving transcript');
+        }
+
+        if (progressIndicator) {
+            progressIndicator.start(steps);
+            progressIndicator.setStepInProgress(0, 'Downloading audio from YouTube...');
         }
 
         const videoId = getVideoId();
@@ -865,17 +937,38 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
             // Progress callback
             (message) => {
                 console.info(`[Buttercup] ${message}`);
+
+                // Update progress based on message
+                if (progressIndicator) {
+                    if (message.includes('Downloading')) {
+                        progressIndicator.setStepInProgress(0, message);
+                    } else if (message.includes('Transcribing')) {
+                        progressIndicator.completeStep(0);
+                        progressIndicator.setStepInProgress(1, message);
+                    }
+                }
             },
             // Success callback
             async (youtubeFormat) => {
                 console.info('[Buttercup] Transcription successful');
+
+                // Mark transcription as complete
+                if (progressIndicator) {
+                    progressIndicator.completeStep(1);
+                }
+
                 customSubtitle = JSON.stringify(youtubeFormat);
 
                 let finalCaptionData = youtubeFormat;
+                let currentStepIndex = 2; // Start at step 2 (translation or caption creation)
 
                 // Check if LLM translation is enabled
                 if (llmTranslationEnabled && llmApiKey && llmModel && llmTargetLanguage) {
                     try {
+                        if (progressIndicator) {
+                            progressIndicator.setStepInProgress(currentStepIndex, `Translating to ${llmTargetLanguage}...`);
+                        }
+
                         console.info(`[Buttercup] 🌐 Translating captions to ${llmTargetLanguage}...`);
 
                         // Create LLM translation instance
@@ -903,10 +996,20 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                         };
 
                         console.info('[Buttercup] ✓ Translation complete!');
+
+                        if (progressIndicator) {
+                            progressIndicator.completeStep(currentStepIndex);
+                            currentStepIndex++;
+                        }
                     } catch (error) {
                         console.error('[Buttercup] ✗ Translation error:', error);
                         showErrorSnackbar(`Translation error: ${error.message}`);
-                        // Continue with untranslated captions
+
+                        if (progressIndicator) {
+                            progressIndicator.failStep(currentStepIndex, error.message);
+                            // Still move to next step with untranslated captions
+                            currentStepIndex++;
+                        }
                     }
                 }
 
@@ -915,6 +1018,11 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                 try {
                     console.info('[Buttercup] 🎯 Creating custom caption overlay');
 
+                    // Update progress: Creating captions
+                    if (progressIndicator) {
+                        progressIndicator.setStepInProgress(currentStepIndex, 'Creating custom caption overlay...');
+                    }
+
                     // Instantiate the custom caption overlay with the transcription data (translated or original)
                     if (window.CustomCaptionOverlay) {
                         const captionOverlay = new window.CustomCaptionOverlay(finalCaptionData);
@@ -922,17 +1030,37 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
 
                         // Store reference globally so it can be toggled later if needed
                         window.buttercupCaptionOverlay = captionOverlay;
+
+                        // Mark caption creation as complete
+                        if (progressIndicator) {
+                            progressIndicator.completeStep(currentStepIndex);
+                            currentStepIndex++;
+                        }
                     } else {
                         console.error('[Buttercup] ✗ CustomCaptionOverlay class not found! Make sure caption-overlay.js is loaded.');
+                        if (progressIndicator) {
+                            progressIndicator.failStep(currentStepIndex, 'CustomCaptionOverlay not found');
+                            currentStepIndex++;
+                        }
                     }
                 } catch (error) {
                     console.error('[Buttercup] ✗ Error creating caption overlay:', error);
+                    if (progressIndicator) {
+                        progressIndicator.failStep(currentStepIndex, error.message);
+                        currentStepIndex++;
+                    }
                 }
 
                 // Save transcript to storage (only if cache enabled)
                 if (USE_CACHE && transcriptStorage && currentVideoId) {
                     try {
                         console.info('[Buttercup] 💾 Saving transcript to storage...');
+
+                        // Update progress: Saving transcript
+                        if (progressIndicator) {
+                            progressIndicator.setStepInProgress(currentStepIndex, 'Saving transcript to storage...');
+                        }
+
                         await transcriptStorage.saveTranscript(currentVideoId, {
                             captionData: finalCaptionData,
                             srtData: transcriptStorage.generateSRT(finalCaptionData),
@@ -944,8 +1072,18 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                             }
                         });
                         console.info('[Buttercup] ✓ Transcript saved successfully');
+
+                        // Mark saving as complete
+                        if (progressIndicator) {
+                            progressIndicator.completeStep(currentStepIndex);
+                            currentStepIndex++;
+                        }
                     } catch (error) {
                         console.error('[Buttercup] ✗ Error saving transcript:', error);
+                        if (progressIndicator) {
+                            progressIndicator.failStep(currentStepIndex, error.message);
+                            currentStepIndex++;
+                        }
                     }
                 } else if (!USE_CACHE) {
                     console.info('[Buttercup] Cache disabled, skipping transcript save');
@@ -956,11 +1094,21 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                     const srtFilename = videoTitle + '.srt';
                     transcriptionHandler.generateSRT(finalCaptionData, srtFilename);
                 }
+
+                // All steps complete!
+                if (progressIndicator) {
+                    progressIndicator.complete();
+                }
             },
             // Error callback
             (error) => {
                 console.error('[Buttercup] Transcription error: ', error);
                 showErrorSnackbar(`Transcription error: ${error.message || 'Unknown error'}`);
+
+                // Show error in progress indicator
+                if (progressIndicator) {
+                    progressIndicator.failStep(progressIndicator.currentStep, error.message || 'Unknown error');
+                }
             }
         );
     }
