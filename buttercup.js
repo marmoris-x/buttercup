@@ -59,6 +59,7 @@ const SVG_TRANSLATE = `<?xml version="1.0" encoding="utf-8"?><svg fill="#fff" wi
 let TRANSLATE = null;
 let ENABLED = null;
 let DOWNLOAD_SRT = null;
+let USE_CACHE = true; // Default: enabled
 
 // Debounce utility function
 function debounce(func, delay) {
@@ -114,6 +115,16 @@ const getButtercupDownloadSrt = new Promise((resolve) => {
     });
     // Request the value of download_srt from the content script
     document.dispatchEvent(new CustomEvent('requestButtercupDownloadSrt', {}));
+});
+
+const getButtercupUseCache = new Promise((resolve) => {
+    document.addEventListener('responseButtercupCache', function (e) {
+        USE_CACHE = e.detail;
+        console.info('[Buttercup] Use Cache: ', USE_CACHE);
+        resolve();
+    });
+    // Request the value of buttercup_cache from the content script
+    document.dispatchEvent(new CustomEvent('requestButtercupCache', {}));
 });
 
 // Function to show error message snackbar
@@ -172,9 +183,10 @@ const getButtercupApiSettings = new Promise((resolve) => {
 async function init() {
     console.info('[Buttercup] Initializing');
     await Promise.all([
-        getButtercupTranslate, 
+        getButtercupTranslate,
         getButtercupEnabled,
         getButtercupDownloadSrt,
+        getButtercupUseCache,
         getButtercupApiSettings
     ]);
 }
@@ -185,7 +197,8 @@ document.addEventListener('buttercupSettingsChanged', async function () {
     document.dispatchEvent(new CustomEvent('requestButtercupTranslate', {}));
     document.dispatchEvent(new CustomEvent('requestButtercupEnabled', {}));
     document.dispatchEvent(new CustomEvent('requestButtercupDownloadSrt', {}));
-    await Promise.all([getButtercupTranslate, getButtercupEnabled, getButtercupDownloadSrt]);
+    document.dispatchEvent(new CustomEvent('requestButtercupCache', {}));
+    await Promise.all([getButtercupTranslate, getButtercupEnabled, getButtercupDownloadSrt, getButtercupUseCache]);
 });
 
 document.addEventListener('buttercupApiSettingsChanged', async function () {
@@ -222,8 +235,8 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
     currentVideoId = getVideoId();
     console.info('[Buttercup] Current video ID:', currentVideoId);
 
-    // Auto-load saved transcript if exists
-    if (transcriptStorage && currentVideoId) {
+    // Auto-load saved transcript if exists (only if cache is enabled)
+    if (USE_CACHE && transcriptStorage && currentVideoId) {
         try {
             const savedTranscript = await transcriptStorage.loadTranscript(currentVideoId);
             if (savedTranscript) {
@@ -254,6 +267,8 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
         } catch (error) {
             console.error('[Buttercup] Error loading saved transcript:', error);
         }
+    } else if (!USE_CACHE) {
+        console.info('[Buttercup] Cache disabled, skipping auto-load');
     }
 
     // Add global error listener to catch YouTube player errors
@@ -728,8 +743,8 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                 currentVideoId = newVideoId;
                 console.info('[Buttercup] New video detected:', currentVideoId);
 
-                // Auto-load saved transcript if exists
-                if (transcriptStorage) {
+                // Auto-load saved transcript if exists (only if cache is enabled)
+                if (USE_CACHE && transcriptStorage) {
                     try {
                         const savedTranscript = await transcriptStorage.loadTranscript(currentVideoId);
                         if (savedTranscript) {
@@ -759,6 +774,8 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                     } catch (error) {
                         console.error('[Buttercup] Error loading saved transcript:', error);
                     }
+                } else if (!USE_CACHE) {
+                    console.info('[Buttercup] Cache disabled, skipping auto-load');
                 }
             }
         }
@@ -912,8 +929,8 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                     console.error('[Buttercup] ✗ Error creating caption overlay:', error);
                 }
 
-                // Save transcript to storage
-                if (transcriptStorage && currentVideoId) {
+                // Save transcript to storage (only if cache enabled)
+                if (USE_CACHE && transcriptStorage && currentVideoId) {
                     try {
                         console.info('[Buttercup] 💾 Saving transcript to storage...');
                         await transcriptStorage.saveTranscript(currentVideoId, {
@@ -930,6 +947,8 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                     } catch (error) {
                         console.error('[Buttercup] ✗ Error saving transcript:', error);
                     }
+                } else if (!USE_CACHE) {
+                    console.info('[Buttercup] Cache disabled, skipping transcript save');
                 }
 
                 // Generate SRT if needed (use translated version if available)
