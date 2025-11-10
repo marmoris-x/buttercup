@@ -867,7 +867,9 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                         // Build video context for better translation
                         const videoContext = {
                             title: videoTitle || 'Unknown',
-                            duration: transcriptionResult.duration ? `${Math.round(transcriptionResult.duration)}s` : 'Unknown'
+                            duration: youtubeFormat.events && youtubeFormat.events.length > 0
+                                ? `${Math.round(youtubeFormat.events[youtubeFormat.events.length - 1].tStartMs / 1000)}s`
+                                : 'Unknown'
                         };
 
                         // Translate the caption events with full video context
