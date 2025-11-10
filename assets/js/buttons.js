@@ -1,3 +1,47 @@
+// Helper function: Convert SRT to YouTube Format
+function convertSrtToYoutubeFormat(srtData) {
+    const events = [];
+
+    // Split SRT into blocks (separated by double newlines)
+    const blocks = srtData.trim().split(/\n\n+/);
+
+    for (const block of blocks) {
+        const lines = block.split('\n');
+        if (lines.length < 3) continue; // Invalid block
+
+        // Parse timing line (e.g., "00:00:00,540 --> 00:00:09,920")
+        const timingLine = lines[1];
+        const timingMatch = timingLine.match(/(\d{2}):(\d{2}):(\d{2}),(\d{3})\s*-->\s*(\d{2}):(\d{2}):(\d{2}),(\d{3})/);
+
+        if (!timingMatch) continue;
+
+        const startHours = parseInt(timingMatch[1]);
+        const startMinutes = parseInt(timingMatch[2]);
+        const startSeconds = parseInt(timingMatch[3]);
+        const startMs = parseInt(timingMatch[4]);
+
+        const endHours = parseInt(timingMatch[5]);
+        const endMinutes = parseInt(timingMatch[6]);
+        const endSeconds = parseInt(timingMatch[7]);
+        const endMs = parseInt(timingMatch[8]);
+
+        const tStartMs = (startHours * 3600000) + (startMinutes * 60000) + (startSeconds * 1000) + startMs;
+        const tEndMs = (endHours * 3600000) + (endMinutes * 60000) + (endSeconds * 1000) + endMs;
+        const dDurationMs = tEndMs - tStartMs;
+
+        // Text is everything after the timing line
+        const text = lines.slice(2).join('\n');
+
+        events.push({
+            tStartMs: tStartMs,
+            dDurationMs: dDurationMs,
+            segs: [{ utf8: text }]
+        });
+    }
+
+    return { events };
+}
+
 // General settings elements
 const enabled = document.getElementById('enabled');
 const translate = document.getElementById('translate');
@@ -694,21 +738,42 @@ viewEditTranscript.addEventListener('click', () => {
     modal.querySelector('#modal-save').addEventListener('click', async () => {
         const newSrtData = modal.querySelector('#srt-editor').value;
 
-        // Update storage
-        chrome.storage.local.get(['buttercup_transcripts'], (result) => {
-            const transcripts = result.buttercup_transcripts || {};
-            const videoId = currentVideoIdEl.textContent;
+        try {
+            // Convert SRT back to YouTube format
+            const youtubeFormat = convertSrtToYoutubeFormat(newSrtData);
 
-            if (transcripts[videoId]) {
-                transcripts[videoId].srtData = newSrtData;
+            // Update storage with both formats
+            chrome.storage.local.get(['buttercup_transcripts'], (result) => {
+                const transcripts = result.buttercup_transcripts || {};
+                const videoId = currentVideoIdEl.textContent;
 
-                chrome.storage.local.set({ buttercup_transcripts: transcripts }, () => {
-                    currentTranscriptData.srtData = newSrtData;
-                    showAlert('SRT updated successfully', 'success');
-                    document.body.removeChild(modal);
-                });
-            }
-        });
+                if (transcripts[videoId]) {
+                    transcripts[videoId].srtData = newSrtData;
+                    transcripts[videoId].youtubeFormat = youtubeFormat;
+
+                    chrome.storage.local.set({ buttercup_transcripts: transcripts }, () => {
+                        currentTranscriptData.srtData = newSrtData;
+                        currentTranscriptData.youtubeFormat = youtubeFormat;
+                        showAlert('SRT updated successfully. Reloading page...', 'success');
+                        document.body.removeChild(modal);
+
+                        // Reload the page to apply changes
+                        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+                            if (tabs && tabs[0]) {
+                                chrome.scripting.executeScript({
+                                    target: { tabId: tabs[0].id },
+                                    func: () => {
+                                        window.location.reload();
+                                    }
+                                }).catch(err => console.error('Error reloading page:', err));
+                            }
+                        });
+                    });
+                }
+            });
+        } catch (error) {
+            showAlert(`Error parsing SRT: ${error.message}`, 'error');
+        }
     });
 
     // Click outside to close
