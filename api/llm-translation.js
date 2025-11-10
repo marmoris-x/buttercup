@@ -65,17 +65,34 @@ class LLMTranslation {
 
             console.log(`[LLMTranslation] Event ${index}: Expected ${originalSegmentCount} segs, got ${lines.length} lines`);
 
-            // If translation has the same number of lines as original segments, use them directly
+            // Decide how to handle the translation based on line count
             let segs;
             if (lines.length === originalSegmentCount) {
+                // Perfect match - use as is
                 segs = lines.map(line => ({ utf8: line }));
                 console.log(`[LLMTranslation] ✓ Perfect match for event ${index}`);
-            } else if (lines.length > originalSegmentCount) {
-                // More lines than expected - merge extra lines into last segment
-                const firstSegs = lines.slice(0, originalSegmentCount - 1).map(line => ({ utf8: line }));
-                const lastSeg = { utf8: lines.slice(originalSegmentCount - 1).join(' ') };
-                segs = [...firstSegs, lastSeg];
-                console.warn(`[LLMTranslation] ⚠ Event ${index}: Too many lines, merged extras`);
+            } else if (lines.length > originalSegmentCount && lines.length <= 3) {
+                // LLM created more lines for better readability (common: 1 -> 2 lines)
+                // Accept this improvement! Use all lines as separate segments
+                segs = lines.map(line => ({ utf8: line }));
+                console.log(`[LLMTranslation] ✓ Event ${index}: Accepted ${lines.length} lines for better readability`);
+            } else if (lines.length > 3) {
+                // Too many lines (more than 3) - merge to max 2 lines for readability
+                if (lines.length === 4) {
+                    // 4 lines -> merge to 2 lines
+                    segs = [
+                        { utf8: lines.slice(0, 2).join(' ') },
+                        { utf8: lines.slice(2, 4).join(' ') }
+                    ];
+                } else {
+                    // 5+ lines -> merge to 2 lines
+                    const mid = Math.ceil(lines.length / 2);
+                    segs = [
+                        { utf8: lines.slice(0, mid).join(' ') },
+                        { utf8: lines.slice(mid).join(' ') }
+                    ];
+                }
+                console.warn(`[LLMTranslation] ⚠ Event ${index}: Too many lines (${lines.length}), merged to 2`);
             } else {
                 // Fewer lines than expected - split the text evenly
                 const words = translatedText.replace(/\|\|\|/g, ' ').split(' ').filter(w => w.length > 0);
