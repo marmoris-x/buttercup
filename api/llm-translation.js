@@ -230,7 +230,6 @@ Translated subtitles (output exactly ${texts.length} lines, one per line, KEEPIN
                     { role: 'system', content: 'You are a professional subtitle translator. Always output exactly the requested number of lines. PRESERVE all ||| separators exactly as they appear in the input.' },
                     { role: 'user', content: prompt }
                 ],
-                temperature: 0.3,
                 max_completion_tokens: 128000
             })
         });
