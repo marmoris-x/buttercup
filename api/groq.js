@@ -1,6 +1,14 @@
 /**
  * Groq API handler for Buttercup
  * Handles transcription and translation of audio files using Groq API
+ *
+ * Features:
+ * - Transcription (audio to text in original language)
+ * - Translation (audio to English text)
+ * - URL parameter support (send URL instead of uploading file)
+ * - Word-level and segment-level timestamps
+ * - Quality validation using metadata (avg_logprob, no_speech_prob, compression_ratio)
+ * - Support for multiple Whisper models
  */
 
 class GroqAPI {
@@ -8,6 +16,17 @@ class GroqAPI {
         this.apiKey = apiKey;
         this.baseUrl = 'https://api.groq.com/openai/v1/audio';
         this.model = 'whisper-large-v3'; // Default model
+
+        // Quality validation thresholds (based on Groq API documentation)
+        this.qualityThresholds = {
+            avgLogProbThreshold: -0.5,      // Values below this indicate low confidence
+            noSpeechProbThreshold: 0.6,     // Values above this indicate likely non-speech
+            compressionRatioMin: 1.0,       // Healthy range: 1.5-2.5
+            compressionRatioMax: 3.0,       // Healthy range: 1.5-2.5
+            lowConfidencePercent: 0.2,      // Warn if > 20% segments have low confidence
+            highNoSpeechPercent: 0.1,       // Warn if > 10% segments are likely non-speech
+            unusualCompressionPercent: 0.15 // Warn if > 15% segments have unusual compression
+        };
     }
 
     /**
@@ -88,7 +107,9 @@ class GroqAPI {
      * @param {string|Blob} audioFile - URL or Blob of the audio file
      * @param {Object} options - Additional options
      * @param {string} options.language - Language code (optional)
-     * @param {string} options.prompt - Prompt to guide the model (optional)
+     * @param {string} options.prompt - Prompt to guide the model (optional, max 224 tokens)
+     * @param {boolean} options.useUrl - If true and audioFile is URL, send URL directly instead of downloading (default: false)
+     * @param {boolean} options.validateQuality - If true, validate transcription quality using metadata (default: false)
      * @returns {Promise<Object>} - Transcription result
      * @throws {Error} - If the transcription fails
      */
@@ -100,23 +121,32 @@ class GroqAPI {
         try {
             const formData = new FormData();
 
-            // Handle file input (URL or Blob)
-            const preparedFile = await this.prepareFile(audioFile);
+            // Handle file input - support direct URL parameter or file upload
+            const useUrl = options.useUrl || false;
 
-            // Validate audio file
-            if (!preparedFile || preparedFile.size === 0) {
-                throw new Error('Invalid audio file: file is empty or null');
+            if (useUrl && typeof audioFile === 'string') {
+                // Use URL parameter instead of file upload
+                formData.append('url', audioFile);
+                console.info('[Buttercup] Using URL parameter for transcription:', audioFile.substring(0, 100) + '...');
+            } else {
+                // Download and upload file
+                const preparedFile = await this.prepareFile(audioFile);
+
+                // Validate audio file
+                if (!preparedFile || preparedFile.size === 0) {
+                    throw new Error('Invalid audio file: file is empty or null');
+                }
+
+                console.info('[Buttercup] Audio file prepared for transcription:', {
+                    size: `${(preparedFile.size / 1024 / 1024).toFixed(2)} MB`,
+                    type: preparedFile.type || 'unknown',
+                    sizeBytes: preparedFile.size
+                });
+
+                // Add file with a proper filename to ensure correct MIME type detection
+                const filename = 'audio.mp3'; // Default filename
+                formData.append('file', preparedFile, filename);
             }
-
-            console.info('[Buttercup] Audio file prepared for transcription:', {
-                size: `${(preparedFile.size / 1024 / 1024).toFixed(2)} MB`,
-                type: preparedFile.type || 'unknown',
-                sizeBytes: preparedFile.size
-            });
-
-            // Add file with a proper filename to ensure correct MIME type detection
-            const filename = 'audio.mp3'; // Default filename
-            formData.append('file', preparedFile, filename);
             
             // Add required parameters
             formData.append('model', this.model);
@@ -184,6 +214,11 @@ class GroqAPI {
                 wordCount: result.words ? result.words.length : 0
             });
 
+            // Validate quality if requested
+            if (options.validateQuality && result.segments) {
+                this.validateTranscriptionQuality(result.segments);
+            }
+
             return result;
         } catch (error) {
             console.error('[Buttercup] Groq API transcription error:', error);
@@ -195,7 +230,9 @@ class GroqAPI {
      * Translate audio file to English
      * @param {string|Blob} audioFile - URL or Blob of the audio file
      * @param {Object} options - Additional options
-     * @param {string} options.prompt - Prompt to guide the model (optional)
+     * @param {string} options.prompt - Prompt to guide the model (optional, max 224 tokens)
+     * @param {boolean} options.useUrl - If true and audioFile is URL, send URL directly instead of downloading (default: false)
+     * @param {boolean} options.validateQuality - If true, validate translation quality using metadata (default: false)
      * @returns {Promise<Object>} - Translation result
      * @throws {Error} - If the translation fails
      */
@@ -213,23 +250,32 @@ class GroqAPI {
         try {
             const formData = new FormData();
 
-            // Handle file input (URL or Blob)
-            const preparedFile = await this.prepareFile(audioFile);
+            // Handle file input - support direct URL parameter or file upload
+            const useUrl = options.useUrl || false;
 
-            // Validate audio file
-            if (!preparedFile || preparedFile.size === 0) {
-                throw new Error('Invalid audio file: file is empty or null');
+            if (useUrl && typeof audioFile === 'string') {
+                // Use URL parameter instead of file upload
+                formData.append('url', audioFile);
+                console.info('[Buttercup] Using URL parameter for translation:', audioFile.substring(0, 100) + '...');
+            } else {
+                // Download and upload file
+                const preparedFile = await this.prepareFile(audioFile);
+
+                // Validate audio file
+                if (!preparedFile || preparedFile.size === 0) {
+                    throw new Error('Invalid audio file: file is empty or null');
+                }
+
+                console.info('[Buttercup] Audio file prepared for translation:', {
+                    size: `${(preparedFile.size / 1024 / 1024).toFixed(2)} MB`,
+                    type: preparedFile.type || 'unknown',
+                    sizeBytes: preparedFile.size
+                });
+
+                // Add file with a proper filename to ensure correct MIME type detection
+                const filename = 'audio.mp3'; // Default filename
+                formData.append('file', preparedFile, filename);
             }
-
-            console.info('[Buttercup] Audio file prepared for translation:', {
-                size: `${(preparedFile.size / 1024 / 1024).toFixed(2)} MB`,
-                type: preparedFile.type || 'unknown',
-                sizeBytes: preparedFile.size
-            });
-
-            // Add file with a proper filename to ensure correct MIME type detection
-            const filename = 'audio.mp3'; // Default filename
-            formData.append('file', preparedFile, filename);
             
             // Add required parameters
             formData.append('model', 'whisper-large-v3'); // Only this model supports translation
@@ -293,10 +339,112 @@ class GroqAPI {
                 wordCount: result.words ? result.words.length : 0
             });
 
+            // Validate quality if requested
+            if (options.validateQuality && result.segments) {
+                this.validateTranscriptionQuality(result.segments);
+            }
+
             return result;
         } catch (error) {
             console.error('[Buttercup] Groq API translation error:', error);
             throw error;
+        }
+    }
+
+    /**
+     * Validate transcription quality using metadata fields
+     * Based on Groq API documentation recommendations
+     * @param {Array} segments - Array of transcription segments with metadata
+     */
+    validateTranscriptionQuality(segments) {
+        if (!segments || segments.length === 0) {
+            console.warn('[Buttercup] No segments to validate');
+            return;
+        }
+
+        let lowConfidenceCount = 0;
+        let highNoSpeechCount = 0;
+        let unusualCompressionCount = 0;
+        const issues = [];
+
+        segments.forEach((segment, index) => {
+            const segmentIssues = [];
+
+            // Check avg_logprob (Average Log Probability)
+            // Values closer to 0 = better confidence
+            if (segment.avg_logprob !== undefined && segment.avg_logprob < this.qualityThresholds.avgLogProbThreshold) {
+                lowConfidenceCount++;
+                segmentIssues.push(`Low confidence (avg_logprob: ${segment.avg_logprob.toFixed(3)})`);
+            }
+
+            // Check no_speech_prob (No Speech Probability)
+            // Values closer to 1 = likely not speech
+            if (segment.no_speech_prob !== undefined && segment.no_speech_prob > this.qualityThresholds.noSpeechProbThreshold) {
+                highNoSpeechCount++;
+                segmentIssues.push(`Possible non-speech (no_speech_prob: ${segment.no_speech_prob.toFixed(3)})`);
+            }
+
+            // Check compression_ratio
+            // Healthy values are typically between 1.5 and 2.5
+            if (segment.compression_ratio !== undefined) {
+                if (segment.compression_ratio > this.qualityThresholds.compressionRatioMax ||
+                    segment.compression_ratio < this.qualityThresholds.compressionRatioMin) {
+                    unusualCompressionCount++;
+                    segmentIssues.push(`Unusual speech pattern (compression_ratio: ${segment.compression_ratio.toFixed(3)})`);
+                }
+            }
+
+            // Log segment-specific issues
+            if (segmentIssues.length > 0) {
+                issues.push({
+                    segment: index,
+                    time: `${segment.start?.toFixed(2)}s - ${segment.end?.toFixed(2)}s`,
+                    text: segment.text?.substring(0, 50),
+                    issues: segmentIssues
+                });
+            }
+        });
+
+        // Log summary
+        console.info('[Buttercup] 📊 Transcription Quality Report:', {
+            totalSegments: segments.length,
+            lowConfidenceSegments: lowConfidenceCount,
+            highNoSpeechSegments: highNoSpeechCount,
+            unusualCompressionSegments: unusualCompressionCount,
+            issuesFound: issues.length
+        });
+
+        // Log detailed issues if any
+        if (issues.length > 0) {
+            console.warn('[Buttercup] ⚠️ Quality Issues Detected:');
+            issues.forEach((issue) => {
+                console.warn(`  Segment ${issue.segment} (${issue.time}):`, issue.issues.join(', '));
+                console.warn(`    Text: "${issue.text}..."`);
+            });
+
+            // Provide recommendations based on thresholds
+            if (lowConfidenceCount > segments.length * this.qualityThresholds.lowConfidencePercent) {
+                console.warn('[Buttercup] 💡 Recommendation: High number of low-confidence segments detected. Consider:');
+                console.warn('   - Improving audio quality (reduce background noise)');
+                console.warn('   - Using a more specific prompt');
+                console.warn('   - Checking for strong accents or unclear pronunciation');
+            }
+
+            if (highNoSpeechCount > segments.length * this.qualityThresholds.highNoSpeechPercent) {
+                console.warn('[Buttercup] 💡 Recommendation: Possible non-speech segments detected. Consider:');
+                console.warn('   - Trimming silence periods');
+                console.warn('   - Reducing background music/noise');
+                console.warn('   - Checking for non-verbal sounds');
+            }
+
+            if (unusualCompressionCount > segments.length * this.qualityThresholds.unusualCompressionPercent) {
+                console.warn('[Buttercup] 💡 Recommendation: Unusual speech patterns detected. Consider:');
+                console.warn('   - Checking for stuttering or word repetition');
+                console.warn('   - Verifying speaker is not talking unusually fast/slow');
+                console.warn('   - Improving audio quality');
+            }
+        } else {
+            console.info('[Buttercup] ✅ Transcription quality looks good!');
         }
     }
 
