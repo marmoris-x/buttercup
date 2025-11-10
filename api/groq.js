@@ -418,18 +418,6 @@ class GroqAPI {
                 throw new Error('No subtitle events generated from transcription response');
             }
 
-            // Fix: If first caption starts within first 2 seconds, move it to 0ms
-            if (jsonSubtitles.events.length > 0 && jsonSubtitles.events[0].tStartMs < 2000) {
-                const firstEvent = jsonSubtitles.events[0];
-                const originalStart = firstEvent.tStartMs;
-
-                // Extend duration to compensate for earlier start
-                firstEvent.dDurationMs += originalStart;
-                firstEvent.tStartMs = 0;
-
-                console.info(`[Buttercup] Adjusted first caption: moved from ${originalStart}ms to 0ms, extended duration by ${originalStart}ms`);
-            }
-
             console.info('[Buttercup] Successfully generated', jsonSubtitles.events.length, 'subtitle events');
             return jsonSubtitles;
         } catch (error) {
