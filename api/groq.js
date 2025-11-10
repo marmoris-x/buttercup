@@ -5,9 +5,8 @@
  * Features:
  * - Transcription (audio to text in original language)
  * - Translation (audio to English text)
- * - URL parameter support (send URL instead of uploading file)
  * - Word-level and segment-level timestamps
- * - Quality validation using metadata (avg_logprob, no_speech_prob, compression_ratio)
+ * - Quality validation using metadata (avg_logprob, no_speech_prob, compression_ratio) - ENABLED BY DEFAULT
  * - Support for multiple Whisper models
  */
 
@@ -108,8 +107,7 @@ class GroqAPI {
      * @param {Object} options - Additional options
      * @param {string} options.language - Language code (optional)
      * @param {string} options.prompt - Prompt to guide the model (optional, max 224 tokens)
-     * @param {boolean} options.useUrl - If true and audioFile is URL, send URL directly instead of downloading (default: false)
-     * @param {boolean} options.validateQuality - If true, validate transcription quality using metadata (default: false)
+     * @param {boolean} options.validateQuality - If true, validate transcription quality using metadata (default: true)
      * @returns {Promise<Object>} - Transcription result
      * @throws {Error} - If the transcription fails
      */
@@ -121,32 +119,23 @@ class GroqAPI {
         try {
             const formData = new FormData();
 
-            // Handle file input - support direct URL parameter or file upload
-            const useUrl = options.useUrl || false;
+            // Handle file input (URL or Blob)
+            const preparedFile = await this.prepareFile(audioFile);
 
-            if (useUrl && typeof audioFile === 'string') {
-                // Use URL parameter instead of file upload
-                formData.append('url', audioFile);
-                console.info('[Buttercup] Using URL parameter for transcription:', audioFile.substring(0, 100) + '...');
-            } else {
-                // Download and upload file
-                const preparedFile = await this.prepareFile(audioFile);
-
-                // Validate audio file
-                if (!preparedFile || preparedFile.size === 0) {
-                    throw new Error('Invalid audio file: file is empty or null');
-                }
-
-                console.info('[Buttercup] Audio file prepared for transcription:', {
-                    size: `${(preparedFile.size / 1024 / 1024).toFixed(2)} MB`,
-                    type: preparedFile.type || 'unknown',
-                    sizeBytes: preparedFile.size
-                });
-
-                // Add file with a proper filename to ensure correct MIME type detection
-                const filename = 'audio.mp3'; // Default filename
-                formData.append('file', preparedFile, filename);
+            // Validate audio file
+            if (!preparedFile || preparedFile.size === 0) {
+                throw new Error('Invalid audio file: file is empty or null');
             }
+
+            console.info('[Buttercup] Audio file prepared for transcription:', {
+                size: `${(preparedFile.size / 1024 / 1024).toFixed(2)} MB`,
+                type: preparedFile.type || 'unknown',
+                sizeBytes: preparedFile.size
+            });
+
+            // Add file with a proper filename to ensure correct MIME type detection
+            const filename = 'audio.mp3'; // Default filename
+            formData.append('file', preparedFile, filename);
             
             // Add required parameters
             formData.append('model', this.model);
@@ -214,8 +203,9 @@ class GroqAPI {
                 wordCount: result.words ? result.words.length : 0
             });
 
-            // Validate quality if requested
-            if (options.validateQuality && result.segments) {
+            // Validate quality (enabled by default, set validateQuality: false to disable)
+            const shouldValidate = options.validateQuality !== false; // Default: true
+            if (shouldValidate && result.segments) {
                 this.validateTranscriptionQuality(result.segments);
             }
 
@@ -231,8 +221,7 @@ class GroqAPI {
      * @param {string|Blob} audioFile - URL or Blob of the audio file
      * @param {Object} options - Additional options
      * @param {string} options.prompt - Prompt to guide the model (optional, max 224 tokens)
-     * @param {boolean} options.useUrl - If true and audioFile is URL, send URL directly instead of downloading (default: false)
-     * @param {boolean} options.validateQuality - If true, validate translation quality using metadata (default: false)
+     * @param {boolean} options.validateQuality - If true, validate translation quality using metadata (default: true)
      * @returns {Promise<Object>} - Translation result
      * @throws {Error} - If the translation fails
      */
@@ -250,32 +239,23 @@ class GroqAPI {
         try {
             const formData = new FormData();
 
-            // Handle file input - support direct URL parameter or file upload
-            const useUrl = options.useUrl || false;
+            // Handle file input (URL or Blob)
+            const preparedFile = await this.prepareFile(audioFile);
 
-            if (useUrl && typeof audioFile === 'string') {
-                // Use URL parameter instead of file upload
-                formData.append('url', audioFile);
-                console.info('[Buttercup] Using URL parameter for translation:', audioFile.substring(0, 100) + '...');
-            } else {
-                // Download and upload file
-                const preparedFile = await this.prepareFile(audioFile);
-
-                // Validate audio file
-                if (!preparedFile || preparedFile.size === 0) {
-                    throw new Error('Invalid audio file: file is empty or null');
-                }
-
-                console.info('[Buttercup] Audio file prepared for translation:', {
-                    size: `${(preparedFile.size / 1024 / 1024).toFixed(2)} MB`,
-                    type: preparedFile.type || 'unknown',
-                    sizeBytes: preparedFile.size
-                });
-
-                // Add file with a proper filename to ensure correct MIME type detection
-                const filename = 'audio.mp3'; // Default filename
-                formData.append('file', preparedFile, filename);
+            // Validate audio file
+            if (!preparedFile || preparedFile.size === 0) {
+                throw new Error('Invalid audio file: file is empty or null');
             }
+
+            console.info('[Buttercup] Audio file prepared for translation:', {
+                size: `${(preparedFile.size / 1024 / 1024).toFixed(2)} MB`,
+                type: preparedFile.type || 'unknown',
+                sizeBytes: preparedFile.size
+            });
+
+            // Add file with a proper filename to ensure correct MIME type detection
+            const filename = 'audio.mp3'; // Default filename
+            formData.append('file', preparedFile, filename);
             
             // Add required parameters
             formData.append('model', 'whisper-large-v3'); // Only this model supports translation
@@ -339,8 +319,9 @@ class GroqAPI {
                 wordCount: result.words ? result.words.length : 0
             });
 
-            // Validate quality if requested
-            if (options.validateQuality && result.segments) {
+            // Validate quality (enabled by default, set validateQuality: false to disable)
+            const shouldValidate = options.validateQuality !== false; // Default: true
+            if (shouldValidate && result.segments) {
                 this.validateTranscriptionQuality(result.segments);
             }
 
