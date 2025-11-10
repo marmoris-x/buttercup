@@ -864,10 +864,17 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                         // Create LLM translation instance
                         const translator = new window.LLMTranslation(llmProvider, llmApiKey, llmModel);
 
-                        // Translate the caption events
+                        // Build video context for better translation
+                        const videoContext = {
+                            title: videoTitle || 'Unknown',
+                            duration: transcriptionResult.duration ? `${Math.round(transcriptionResult.duration)}s` : 'Unknown'
+                        };
+
+                        // Translate the caption events with full video context
                         const translatedEvents = await translator.translateCaptions(
                             youtubeFormat.events,
-                            llmTargetLanguage
+                            llmTargetLanguage,
+                            videoContext
                         );
 
                         // Update caption data with translations

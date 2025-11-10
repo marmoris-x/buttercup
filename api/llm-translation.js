@@ -16,98 +16,52 @@ class LLMTranslation {
      * @param {string} targetLanguage - Target language (e.g., "German", "Spanish", "French")
      * @returns {Promise<Array>} - Translated caption events
      */
-    async translateCaptions(captionEvents, targetLanguage) {
+    async translateCaptions(captionEvents, targetLanguage, videoContext = null) {
         console.info(`[LLMTranslation] Starting translation to ${targetLanguage} using ${this.provider}`);
 
-        // Store original segment structure for each event
-        const segmentStructures = captionEvents.map(event => event.segs.length);
-
-        // Extract all text from captions, using ||| as separator for multi-line entries
+        // Extract all text segments (flatten all segs from all events)
         const textsToTranslate = captionEvents.map(event =>
-            event.segs.map(seg => seg.utf8).join('|||')  // Use ||| as line separator
+            event.segs.map(seg => seg.utf8).join(' ')
         );
 
         console.info(`[LLMTranslation] Translating ${textsToTranslate.length} caption segments`);
-        console.info(`[LLMTranslation] Segment structures:`, segmentStructures.slice(0, 10));
 
-        // Get full context summary for better translation quality
-        const fullContext = this.getFullContext(textsToTranslate);
+        // Build comprehensive context for better translation
+        const fullContext = this.buildFullContext(textsToTranslate, videoContext);
 
-        // Smart batching: Use larger chunks when possible
-        // For videos under 100 captions, try to do it all at once for full context
+        // Smart batching: Larger chunks for better context, but allow streaming
         const chunkSize = textsToTranslate.length <= 100 ? textsToTranslate.length : 50;
         const translatedTexts = [];
 
         for (let i = 0; i < textsToTranslate.length; i += chunkSize) {
             const chunk = textsToTranslate.slice(i, i + chunkSize);
-            console.info(`[LLMTranslation] Processing chunk ${Math.floor(i/chunkSize) + 1}/${Math.ceil(textsToTranslate.length/chunkSize)}`);
+            const chunkNum = Math.floor(i/chunkSize) + 1;
+            const totalChunks = Math.ceil(textsToTranslate.length/chunkSize);
+
+            console.info(`[LLMTranslation] Processing chunk ${chunkNum}/${totalChunks}`);
 
             const translatedChunk = await this.translateBatch(chunk, targetLanguage, fullContext);
             translatedTexts.push(...translatedChunk);
+
+            // Callback for streaming (if provided)
+            if (this.onChunkComplete) {
+                this.onChunkComplete(chunkNum, totalChunks, translatedChunk);
+            }
         }
 
-        // Replace original text with translations, preserving segment structure
+        // Simple 1:1 mapping of translations to events
         const translatedEvents = captionEvents.map((event, index) => {
             const translatedText = translatedTexts[index];
-            const originalSegmentCount = segmentStructures[index];
 
-            // Safety check: if translatedText is undefined, use original text
             if (!translatedText) {
-                console.error(`[LLMTranslation] ⚠ Missing translation for event ${index}, using original text`);
+                console.error(`[LLMTranslation] ⚠ Missing translation for event ${index}, using original`);
                 return event;
             }
 
-            // Split the translated text back using the ||| separator
-            // KEEP newlines (\n) to preserve 2-line subtitle structure!
-            const lines = translatedText.split('|||')
-                .map(line => line.trim())  // Only trim whitespace, DON'T remove \n!
-                .filter(line => line.length > 0);
-
-            console.log(`[LLMTranslation] Event ${index}: Expected ${originalSegmentCount} segs, got ${lines.length} lines`);
-
-            // Decide how to handle the translation based on line count
-            let segs;
-            if (lines.length === originalSegmentCount) {
-                // Perfect match - use as is
-                segs = lines.map(line => ({ utf8: line }));
-                console.log(`[LLMTranslation] ✓ Perfect match for event ${index}`);
-            } else if (lines.length > originalSegmentCount && lines.length <= 3) {
-                // LLM created more lines for better readability (common: 1 -> 2 lines)
-                // Accept this improvement! Use all lines as separate segments
-                segs = lines.map(line => ({ utf8: line }));
-                console.log(`[LLMTranslation] ✓ Event ${index}: Accepted ${lines.length} lines for better readability`);
-            } else if (lines.length > 3) {
-                // Too many lines (more than 3) - merge to max 2 lines for readability
-                if (lines.length === 4) {
-                    // 4 lines -> merge to 2 lines
-                    segs = [
-                        { utf8: lines.slice(0, 2).join(' ') },
-                        { utf8: lines.slice(2, 4).join(' ') }
-                    ];
-                } else {
-                    // 5+ lines -> merge to 2 lines
-                    const mid = Math.ceil(lines.length / 2);
-                    segs = [
-                        { utf8: lines.slice(0, mid).join(' ') },
-                        { utf8: lines.slice(mid).join(' ') }
-                    ];
-                }
-                console.warn(`[LLMTranslation] ⚠ Event ${index}: Too many lines (${lines.length}), merged to 2`);
-            } else {
-                // Fewer lines than expected - split the text evenly
-                const words = translatedText.replace(/\|\|\|/g, ' ').split(' ').filter(w => w.length > 0);
-                const wordsPerSeg = Math.ceil(words.length / originalSegmentCount);
-                segs = [];
-                for (let i = 0; i < originalSegmentCount; i++) {
-                    const segWords = words.slice(i * wordsPerSeg, (i + 1) * wordsPerSeg);
-                    segs.push({ utf8: segWords.join(' ') });
-                }
-                console.warn(`[LLMTranslation] ⚠ Event ${index}: Too few lines, split evenly`);
-            }
-
+            // Simple approach: Use translated text as-is, one segment per event
             return {
                 ...event,
-                segs: segs
+                segs: [{ utf8: translatedText }]
             };
         });
 
@@ -116,18 +70,52 @@ class LLMTranslation {
     }
 
     /**
-     * Get full context summary to help LLM understand the video content
+     * Build comprehensive context for better translation
      */
-    getFullContext(texts) {
-        // Take first 20 and last 10 captions as context
-        const contextStart = texts.slice(0, Math.min(20, texts.length));
-        const contextEnd = texts.length > 20 ? texts.slice(-10) : [];
+    buildFullContext(texts, videoContext) {
+        // Get video metadata if available
+        const videoTitle = videoContext?.title || 'Unknown';
+        const videoDuration = videoContext?.duration || 'Unknown';
+
+        // Full transcript preview (first 30% and last 10%)
+        const previewCount = Math.min(Math.ceil(texts.length * 0.3), 50);
+        const endPreviewCount = Math.min(Math.ceil(texts.length * 0.1), 15);
+
+        const fullTranscript = texts.join(' ');
+        const transcriptStart = texts.slice(0, previewCount).join(' ');
+        const transcriptEnd = texts.length > previewCount ? texts.slice(-endPreviewCount).join(' ') : '';
 
         return {
-            start: contextStart.join(' '),
-            end: contextEnd.join(' '),
-            totalLength: texts.length
+            videoTitle,
+            videoDuration,
+            totalSegments: texts.length,
+            fullTranscriptPreview: fullTranscript.substring(0, 3000), // First 3000 chars
+            transcriptStart,
+            transcriptEnd,
+            estimatedTopic: this.detectTopic(fullTranscript.substring(0, 2000))
         };
+    }
+
+    /**
+     * Detect topic/category from transcript for better context
+     */
+    detectTopic(text) {
+        const lowerText = text.toLowerCase();
+
+        // Islamic/Religious content
+        if (lowerText.includes('allah') || lowerText.includes('قرآن') || lowerText.includes('الله')) {
+            return 'Islamic/Religious';
+        }
+        // Educational
+        if (lowerText.includes('learn') || lowerText.includes('tutorial') || lowerText.includes('lesson')) {
+            return 'Educational';
+        }
+        // News
+        if (lowerText.includes('report') || lowerText.includes('news') || lowerText.includes('breaking')) {
+            return 'News';
+        }
+
+        return 'General';
     }
 
     /**
@@ -151,68 +139,86 @@ class LLMTranslation {
     }
 
     buildPrompt(texts, targetLanguage, fullContext) {
-        const contextInfo = fullContext ? `
-FULL VIDEO CONTEXT (to help you understand the content type):
-Beginning: "${fullContext.start.substring(0, 300)}..."
-${fullContext.end ? `End: "...${fullContext.end.substring(0, 200)}"` : ''}
-Total video has ${fullContext.totalLength} subtitle segments.
+        // Build comprehensive context section
+        const contextSection = fullContext ? `
+═══════════════════════════════════════════════════════════════
+                    📺 VIDEO CONTEXT (READ THIS FIRST!)
+═══════════════════════════════════════════════════════════════
 
+Video Title: ${fullContext.videoTitle}
+Duration: ${fullContext.videoDuration}
+Content Type: ${fullContext.estimatedTopic}
+Total Segments: ${fullContext.totalSegments}
+
+FULL TRANSCRIPT PREVIEW (First 3000 characters):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+${fullContext.fullTranscriptPreview}
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+VIDEO ENDING PREVIEW:
+${fullContext.transcriptEnd ? fullContext.transcriptEnd : 'N/A'}
+
+═══════════════════════════════════════════════════════════════
 ` : '';
 
-        // Special instructions for German translations of Arabic content
-        const germanArabicInstructions = targetLanguage.toLowerCase().includes('german') || targetLanguage.toLowerCase().includes('deutsch') ? `
+        // Language-specific instructions
+        const languageInstructions = this.getLanguageSpecificInstructions(targetLanguage, fullContext.estimatedTopic);
 
-SPECIAL INSTRUCTIONS FOR ARABIC → GERMAN TRANSLATION:
-- When translating Quranic verses, use the style and terminology of Frank Bubenheim's Quran translation
-- For general Arabic religious content, follow the linguistic style and word choices of Frank Bubenheim's Quran translation
-- Maintain theological precision and reverence as exemplified in Frank Bubenheim's work
-- Use appropriate Islamic terminology in German as used by Frank Bubenheim (e.g., "die Rechtleitung", "die Barmherzigkeit Allahs")
-- Preserve the formal and respectful tone characteristic of Bubenheim's translation style
-- For Quranic references, orient yourself by the vocabulary and phrasing used in the Frank Bubenheim translation
+        return `You are a professional subtitle translator. Your task is to translate video subtitles.
 
-EXAMPLES of Bubenheim-style translation:
-- Arabic religious concepts → Use established German Islamic terminology from Bubenheim
-- Quranic verses → Match the style of Frank Bubenheim's Quran translation
-- Maintain the reverent and precise linguistic approach of Bubenheim's work
-` : '';
+${contextSection}
 
-        return `You are a professional subtitle translator. Translate the following video subtitles to ${targetLanguage}.
+${languageInstructions}
 
-${contextInfo}${germanArabicInstructions}
-CRITICAL TRANSLATION RULES:
-1. Preserve the EXACT meaning and context
-2. Keep the SAME number of lines (MUST output exactly ${texts.length} lines)
-3. **EXTREMELY IMPORTANT**: Some subtitle entries contain multiple lines separated by "|||" (three pipe characters)
-4. You MUST preserve these ||| separators EXACTLY in your translation
-5. Translate each part separated by ||| but keep the ||| separator between them
-6. Output ONLY the translations, one entry per line
-7. NO explanations, NO numbering, NO extra text
-8. Maintain natural timing for speech
+TRANSLATION RULES:
+1. Output EXACTLY ${texts.length} translated lines (one per input line)
+2. NO explanations, NO numbering, NO extra commentary
+3. Preserve EXACT meaning and context from the video
+4. Keep subtitle length appropriate for reading speed
+5. Maintain natural speech flow and timing
 
-EXAMPLES of handling ||| separators:
-Input:  "كيف يكون الرجل مباركا؟ يقول|||الله عز وجل في نبيه"
-Output: "Wie ist ein Mann gesegnet? Sagt|||Allah über seinen Propheten"
-(Notice the ||| is PRESERVED in the translation!)
+CULTURAL & TERMINOLOGY PRESERVATION:
+- Religious terms: "Allah" → "Allah" (NEVER "God"/"Gott"/"Dios")
+- Islamic terms: Keep "Quran", "Hadith", "Salah", "Inshallah", "Mashallah" etc.
+- Proper nouns: Names, places, brands stay unchanged
+- Technical terms: Keep specialized vocabulary accurate
 
-CULTURAL & RELIGIOUS ACCURACY:
-9. DO NOT translate religious terms: "Allah" stays "Allah" (not "God" or "Gott")
-10. Preserve proper nouns: names, places, brands, products
-11. Keep religious expressions: "Inshallah", "Mashallah", "Alhamdulillah", "Subhanallah", etc.
-12. Preserve cultural references and idioms when they don't have direct equivalents
-13. Keep technical terms, acronyms, and specialized vocabulary accurate
-14. For religious texts: maintain reverence and theological accuracy
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                    SUBTITLES TO TRANSLATE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-EXAMPLES of what to PRESERVE:
-- "Allah" → "Allah" (NOT "God"/"Gott"/"Dios")
-- "Quran" → "Quran" (NOT "Koran")
-- "Prophet Muhammad" → "Prophet Muhammad" (maintain proper noun)
-- "Salah" → "Salah" (Islamic prayer term, not "prayer"/"Gebet")
-- "Hadith" → "Hadith" (preserve technical term)
-
-Subtitles to translate:
 ${texts.map((text, i) => `${i + 1}. ${text}`).join('\n')}
 
-Translated subtitles (output exactly ${texts.length} lines, one per line, KEEPING all ||| separators):`;
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+                TRANSLATED SUBTITLES (${targetLanguage})
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Output ${texts.length} lines below (numbered format is fine):`;
+    }
+
+    /**
+     * Get language-specific translation instructions
+     */
+    getLanguageSpecificInstructions(targetLanguage, topic) {
+        const isGerman = targetLanguage.toLowerCase().includes('german') || targetLanguage.toLowerCase().includes('deutsch');
+        const isIslamic = topic === 'Islamic/Religious';
+
+        if (isGerman && isIslamic) {
+            return `
+🎯 SPECIAL INSTRUCTIONS: Arabic → German (Islamic Content)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+- Use Frank Bubenheim's Quran translation style and terminology
+- Maintain theological precision and reverent tone
+- Use established German Islamic terminology:
+  • "die Rechtleitung" (guidance)
+  • "die Barmherzigkeit Allahs" (mercy of Allah)
+  • "der Erhabene" (the Exalted)
+- For Quranic verses: Match Bubenheim's translation phrasing
+- Preserve formal and respectful linguistic style
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+        }
+
+        return `STANDARD TRANSLATION: Maintain accuracy and natural flow in ${targetLanguage}.`;
     }
 
     async translateWithOpenAI(prompt, expectedCount) {
@@ -227,7 +233,7 @@ Translated subtitles (output exactly ${texts.length} lines, one per line, KEEPIN
             body: JSON.stringify({
                 model: this.model,
                 messages: [
-                    { role: 'system', content: 'You are a professional subtitle translator. Always output exactly the requested number of lines. PRESERVE all ||| separators exactly as they appear in the input.' },
+                    { role: 'system', content: 'You are a professional subtitle translator. Output exactly the requested number of lines, one translation per line. Use the full video context to ensure accurate translations.' },
                     { role: 'user', content: prompt }
                 ],
                 max_completion_tokens: 128000
@@ -294,48 +300,10 @@ Translated subtitles (output exactly ${texts.length} lines, one per line, KEEPIN
             throw new Error(`Gemini response missing content. Finish reason: ${data.candidates[0].finishReason || 'unknown'}`);
         }
 
-        let translatedText = data.candidates[0].content.parts[0].text;
-
+        const translatedText = data.candidates[0].content.parts[0].text;
         console.log('[LLMTranslation] Raw Gemini text (first 500 chars):', translatedText.substring(0, 500));
 
-        // Parse the response - Gemini returns numbered lines like "1. text\n2. text\n3. text"
-        // First, split by newlines to get individual lines
-        let lines = translatedText
-            .split('\n')
-            .map(line => line.trim())
-            .filter(line => line.length > 0);
-
-        console.log(`[LLMTranslation] Found ${lines.length} non-empty lines`);
-
-        // Now process each line - remove numbering and handle ||| separators
-        const segments = lines
-            .map(line => {
-                // Remove leading numbering like "1. ", "2. ", etc.
-                let cleaned = line.replace(/^\d+\.\s*/, '');
-                // Keep ||| as is - it will be handled by the caller
-                return cleaned;
-            })
-            .filter(seg => seg.length > 0);
-
-        console.log(`[LLMTranslation] Processed ${segments.length} segments`);
-
-        if (segments.length !== expectedCount) {
-            console.warn(`[LLMTranslation] Expected ${expectedCount} segments, got ${segments.length}`);
-
-            // If we got significantly fewer segments, the response might be in a single block
-            // Try to split by numbered patterns
-            if (segments.length === 1 && expectedCount > 1) {
-                console.warn('[LLMTranslation] Attempting to split single-block response by numbered patterns');
-                const numberedPattern = /(\d+)\.\s+/g;
-                const parts = segments[0].split(numberedPattern).filter(part => !part.match(/^\d+$/));
-                if (parts.length >= expectedCount / 2) {
-                    console.log(`[LLMTranslation] Successfully split into ${parts.length} parts`);
-                    return parts.slice(0, expectedCount);
-                }
-            }
-        }
-
-        return segments;
+        return this.parseTranslationResponse(translatedText, expectedCount);
     }
 
     async translateWithClaude(prompt, expectedCount) {
@@ -384,7 +352,7 @@ Translated subtitles (output exactly ${texts.length} lines, one per line, KEEPIN
             body: JSON.stringify({
                 model: this.model,
                 messages: [
-                    { role: 'system', content: 'You are a professional subtitle translator. Always output exactly the requested number of lines. PRESERVE all ||| separators exactly as they appear in the input.' },
+                    { role: 'system', content: 'You are a professional subtitle translator. Output exactly the requested number of lines, one translation per line. Use the full video context to ensure accurate translations.' },
                     { role: 'user', content: prompt }
                 ],
                 temperature: 0.3,
