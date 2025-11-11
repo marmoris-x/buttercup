@@ -48,6 +48,7 @@ const translate = document.getElementById('translate');
 const translateContainer = document.getElementById('translate-container');
 const cache = document.getElementById('cache');
 const download = document.getElementById('download');
+const autoTranscribe = document.getElementById('auto-transcribe');
 const language = document.getElementById('language');
 const startTranscription = document.getElementById('start-transcription');
 
@@ -66,6 +67,17 @@ const llmApiKey = document.getElementById('llm-api-key');
 const llmModel = document.getElementById('llm-model');
 
 // Advanced settings elements
+const captionFontSize = document.getElementById('caption-font-size');
+const fontSizeValue = document.getElementById('font-size-value');
+const captionPosition = document.getElementById('caption-position');
+const captionFontColor = document.getElementById('caption-font-color');
+const captionFontColorText = document.getElementById('caption-font-color-text');
+const captionBgColor = document.getElementById('caption-bg-color');
+const captionBgColorText = document.getElementById('caption-bg-color-text');
+const captionBgOpacity = document.getElementById('caption-bg-opacity');
+const captionOpacityValue = document.getElementById('caption-opacity-value');
+const captionPreview = document.getElementById('caption-preview');
+const darkMode = document.getElementById('dark-mode');
 const useWordTimestamps = document.getElementById('use-word-timestamps');
 const wordTimestampSettings = document.getElementById('word-timestamp-settings');
 const wordsPerLine = document.getElementById('words-per-line');
@@ -92,8 +104,13 @@ const transcriptDate = document.getElementById('transcript-date');
 const summaryStatusContainer = document.getElementById('summary-status-container');
 const showExistingSummary = document.getElementById('show-existing-summary');
 const deleteExistingSummary = document.getElementById('delete-existing-summary');
+const exportActions = document.getElementById('export-actions');
+const exportSrt = document.getElementById('export-srt');
+const exportVtt = document.getElementById('export-vtt');
+const exportTxt = document.getElementById('export-txt');
+const exportJson = document.getElementById('export-json');
+const copyToClipboard = document.getElementById('copy-to-clipboard');
 const transcriptActions = document.getElementById('transcript-actions');
-const downloadTranscriptSrt = document.getElementById('download-transcript-srt');
 const viewEditTranscript = document.getElementById('view-edit-transcript');
 const deleteTranscript = document.getElementById('delete-transcript');
 const generateSummary = document.getElementById('generate-summary');
@@ -386,6 +403,16 @@ language.addEventListener('change', () => {
     });
 });
 
+autoTranscribe.addEventListener('change', () => {
+    chrome.storage.sync.set({ buttercup_auto_transcribe: autoTranscribe.checked }, () => {
+        if (chrome.runtime.lastError) {
+            console.error('[Buttercup] Error saving auto-transcribe setting:', chrome.runtime.lastError);
+            return;
+        }
+        console.log('[Buttercup] Auto-transcribe setting saved:', autoTranscribe.checked);
+    });
+});
+
 
 // Event listener for Groq model change
 groqModel.addEventListener('change', () => {
@@ -400,6 +427,125 @@ useWordTimestamps.addEventListener('change', () => {
 // Event listener for LLM translation toggle
 llmTranslationEnabled.addEventListener('change', () => {
     toggleLLMTranslationSettings();
+});
+
+// Caption Customization Event Listeners
+function updateCaptionPreview() {
+    const fontSize = captionFontSize.value;
+    const fontColor = captionFontColor.value;
+    const bgColor = captionBgColor.value;
+    const opacity = captionBgOpacity.value / 100;
+
+    // Convert hex to rgba
+    const r = parseInt(bgColor.slice(1, 3), 16);
+    const g = parseInt(bgColor.slice(3, 5), 16);
+    const b = parseInt(bgColor.slice(5, 7), 16);
+
+    captionPreview.style.fontSize = `${fontSize}px`;
+    captionPreview.style.color = fontColor;
+    captionPreview.style.background = `rgba(${r}, ${g}, ${b}, ${opacity})`;
+}
+
+function saveCaptionSettings() {
+    chrome.storage.sync.set({
+        buttercup_caption_font_size: parseInt(captionFontSize.value),
+        buttercup_caption_position: captionPosition.value,
+        buttercup_caption_font_color: captionFontColor.value,
+        buttercup_caption_bg_color: captionBgColor.value,
+        buttercup_caption_bg_opacity: parseFloat(captionBgOpacity.value / 100)
+    }, () => {
+        if (chrome.runtime.lastError) {
+            console.error('[Buttercup] Error saving caption settings:', chrome.runtime.lastError);
+            return;
+        }
+
+        // Notify content script about settings change
+        chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+            if (chrome.runtime.lastError || !tabs || !tabs[0]) return;
+
+            chrome.scripting.executeScript({
+                target: { tabId: tabs[0].id },
+                func: (settings) => {
+                    document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
+                        detail: {
+                            fontSize: settings.fontSize,
+                            position: settings.position,
+                            fontColor: settings.fontColor,
+                            backgroundColor: settings.bgColor,
+                            backgroundOpacity: settings.bgOpacity
+                        }
+                    }));
+                },
+                args: [{
+                    fontSize: parseInt(captionFontSize.value),
+                    position: captionPosition.value,
+                    fontColor: captionFontColor.value,
+                    bgColor: captionBgColor.value,
+                    bgOpacity: parseFloat(captionBgOpacity.value / 100)
+                }]
+            }).catch(err => console.error('[Buttercup] Error:', err));
+        });
+    });
+}
+
+captionFontSize.addEventListener('input', () => {
+    fontSizeValue.textContent = captionFontSize.value;
+    updateCaptionPreview();
+});
+
+captionFontSize.addEventListener('change', saveCaptionSettings);
+
+captionPosition.addEventListener('change', () => {
+    saveCaptionSettings();
+});
+
+captionFontColor.addEventListener('input', () => {
+    captionFontColorText.value = captionFontColor.value;
+    updateCaptionPreview();
+});
+
+captionFontColor.addEventListener('change', saveCaptionSettings);
+
+captionFontColorText.addEventListener('input', () => {
+    if (/^#[0-9A-F]{6}$/i.test(captionFontColorText.value)) {
+        captionFontColor.value = captionFontColorText.value;
+        updateCaptionPreview();
+        saveCaptionSettings();
+    }
+});
+
+captionBgColor.addEventListener('input', () => {
+    captionBgColorText.value = captionBgColor.value;
+    updateCaptionPreview();
+});
+
+captionBgColor.addEventListener('change', saveCaptionSettings);
+
+captionBgColorText.addEventListener('input', () => {
+    if (/^#[0-9A-F]{6}$/i.test(captionBgColorText.value)) {
+        captionBgColor.value = captionBgColorText.value;
+        updateCaptionPreview();
+        saveCaptionSettings();
+    }
+});
+
+captionBgOpacity.addEventListener('input', () => {
+    captionOpacityValue.textContent = captionBgOpacity.value + '%';
+    updateCaptionPreview();
+});
+
+captionBgOpacity.addEventListener('change', saveCaptionSettings);
+
+// Dark Mode Toggle
+darkMode.addEventListener('change', () => {
+    const theme = darkMode.checked ? 'dark' : 'cupcake';
+    document.documentElement.setAttribute('data-theme', theme);
+
+    chrome.storage.sync.set({ buttercup_dark_mode: darkMode.checked }, () => {
+        if (chrome.runtime.lastError) {
+            console.error('[Buttercup] Error saving dark mode setting:', chrome.runtime.lastError);
+        }
+    });
 });
 
 // API settings event listeners
@@ -633,8 +779,16 @@ async function refreshTranscriptInfo() {
 
 // Enable transcript buttons
 function enableTranscriptButtons() {
+    // Enable export buttons
+    exportActions.style.opacity = '1';
+    exportSrt.disabled = false;
+    exportVtt.disabled = false;
+    exportTxt.disabled = false;
+    exportJson.disabled = false;
+    copyToClipboard.disabled = false;
+
+    // Enable transcript management buttons
     transcriptActions.style.opacity = '1';
-    downloadTranscriptSrt.disabled = false;
     viewEditTranscript.disabled = false;
     deleteTranscript.disabled = false;
 
@@ -649,8 +803,16 @@ function enableTranscriptButtons() {
 
 // Disable transcript buttons
 function disableTranscriptButtons() {
+    // Disable export buttons
+    exportActions.style.opacity = '0.5';
+    exportSrt.disabled = true;
+    exportVtt.disabled = true;
+    exportTxt.disabled = true;
+    exportJson.disabled = true;
+    copyToClipboard.disabled = true;
+
+    // Disable transcript management buttons
     transcriptActions.style.opacity = '0.5';
-    downloadTranscriptSrt.disabled = true;
     viewEditTranscript.disabled = true;
     deleteTranscript.disabled = true;
     generateSummary.disabled = true;
@@ -676,30 +838,6 @@ function loadStorageStats() {
         storageSize.textContent = `${sizeKB} KB`;
     });
 }
-
-// Download SRT file
-downloadTranscriptSrt.addEventListener('click', () => {
-    if (!currentTranscriptData) {
-        showAlert('No transcript data available', 'error');
-        return;
-    }
-
-    const srtData = currentTranscriptData.srtData;
-    const videoTitle = currentTranscriptData.videoTitle || 'buttercup_subtitles';
-
-    // Create blob and download
-    const blob = new Blob([srtData], { type: 'text/plain' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${videoTitle}.srt`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    showAlert('SRT file downloaded successfully', 'success');
-});
 
 // View/Edit SRT
 viewEditTranscript.addEventListener('click', () => {
@@ -818,6 +956,197 @@ deleteTranscript.addEventListener('click', () => {
                     }).catch(err => console.error('Error reloading page:', err));
                 }
             });
+        });
+    });
+});
+
+// Export Buttons Event Listeners
+exportSrt.addEventListener('click', () => {
+    if (!currentTranscriptData) {
+        showAlert('No transcript data available', 'error');
+        return;
+    }
+
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || !tabs[0]) return;
+
+        chrome.scripting.executeScript({
+            target: { tabId: tabs[0].id },
+            func: () => {
+                if (window.transcriptStorage && window.buttercupCaptionOverlay) {
+                    const captionData = window.buttercupCaptionOverlay.captions
+                        ? { events: window.buttercupCaptionOverlay.captions }
+                        : null;
+
+                    if (captionData) {
+                        const videoTitle = document.title.replace(' - YouTube', '');
+                        window.transcriptStorage.exportCaptions(captionData, 'srt', videoTitle);
+                        return { success: true };
+                    }
+                }
+                return { success: false };
+            }
+        }).then(results => {
+            if (results && results[0]?.result?.success) {
+                showAlert('SRT file downloaded successfully', 'success');
+            } else {
+                showAlert('Failed to export SRT', 'error');
+            }
+        }).catch(err => {
+            console.error('Export error:', err);
+            showAlert('Export failed: ' + err.message, 'error');
+        });
+    });
+});
+
+exportVtt.addEventListener('click', () => {
+    if (!currentTranscriptData) {
+        showAlert('No transcript data available', 'error');
+        return;
+    }
+
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || !tabs[0]) return;
+
+        chrome.scripting.executeScript({
+            target: { tabId: tabs[0].id },
+            func: () => {
+                if (window.transcriptStorage && window.buttercupCaptionOverlay) {
+                    const captionData = window.buttercupCaptionOverlay.captions
+                        ? { events: window.buttercupCaptionOverlay.captions }
+                        : null;
+
+                    if (captionData) {
+                        const videoTitle = document.title.replace(' - YouTube', '');
+                        window.transcriptStorage.exportCaptions(captionData, 'vtt', videoTitle);
+                        return { success: true };
+                    }
+                }
+                return { success: false };
+            }
+        }).then(results => {
+            if (results && results[0]?.result?.success) {
+                showAlert('VTT file downloaded successfully', 'success');
+            } else {
+                showAlert('Failed to export VTT', 'error');
+            }
+        }).catch(err => {
+            console.error('Export error:', err);
+            showAlert('Export failed: ' + err.message, 'error');
+        });
+    });
+});
+
+exportTxt.addEventListener('click', () => {
+    if (!currentTranscriptData) {
+        showAlert('No transcript data available', 'error');
+        return;
+    }
+
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || !tabs[0]) return;
+
+        chrome.scripting.executeScript({
+            target: { tabId: tabs[0].id },
+            func: () => {
+                if (window.transcriptStorage && window.buttercupCaptionOverlay) {
+                    const captionData = window.buttercupCaptionOverlay.captions
+                        ? { events: window.buttercupCaptionOverlay.captions }
+                        : null;
+
+                    if (captionData) {
+                        const videoTitle = document.title.replace(' - YouTube', '');
+                        window.transcriptStorage.exportCaptions(captionData, 'txt', videoTitle, { includeTimestamps: false });
+                        return { success: true };
+                    }
+                }
+                return { success: false };
+            }
+        }).then(results => {
+            if (results && results[0]?.result?.success) {
+                showAlert('TXT file downloaded successfully', 'success');
+            } else {
+                showAlert('Failed to export TXT', 'error');
+            }
+        }).catch(err => {
+            console.error('Export error:', err);
+            showAlert('Export failed: ' + err.message, 'error');
+        });
+    });
+});
+
+exportJson.addEventListener('click', () => {
+    if (!currentTranscriptData) {
+        showAlert('No transcript data available', 'error');
+        return;
+    }
+
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || !tabs[0]) return;
+
+        chrome.scripting.executeScript({
+            target: { tabId: tabs[0].id },
+            func: () => {
+                if (window.transcriptStorage && window.buttercupCaptionOverlay) {
+                    const captionData = window.buttercupCaptionOverlay.captions
+                        ? { events: window.buttercupCaptionOverlay.captions }
+                        : null;
+
+                    if (captionData) {
+                        const videoTitle = document.title.replace(' - YouTube', '');
+                        window.transcriptStorage.exportCaptions(captionData, 'json', videoTitle);
+                        return { success: true };
+                    }
+                }
+                return { success: false };
+            }
+        }).then(results => {
+            if (results && results[0]?.result?.success) {
+                showAlert('JSON file downloaded successfully', 'success');
+            } else {
+                showAlert('Failed to export JSON', 'error');
+            }
+        }).catch(err => {
+            console.error('Export error:', err);
+            showAlert('Export failed: ' + err.message, 'error');
+        });
+    });
+});
+
+copyToClipboard.addEventListener('click', () => {
+    if (!currentTranscriptData) {
+        showAlert('No transcript data available', 'error');
+        return;
+    }
+
+    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
+        if (!tabs || !tabs[0]) return;
+
+        chrome.scripting.executeScript({
+            target: { tabId: tabs[0].id },
+            func: async () => {
+                if (window.transcriptStorage && window.buttercupCaptionOverlay) {
+                    const captionData = window.buttercupCaptionOverlay.captions
+                        ? { events: window.buttercupCaptionOverlay.captions }
+                        : null;
+
+                    if (captionData) {
+                        const textContent = window.transcriptStorage.getClipboardContent(captionData, 'plain');
+                        const success = await window.transcriptStorage.copyToClipboard(textContent);
+                        return { success };
+                    }
+                }
+                return { success: false };
+            }
+        }).then(results => {
+            if (results && results[0]?.result?.success) {
+                showAlert('Copied to clipboard!', 'success');
+            } else {
+                showAlert('Failed to copy to clipboard', 'error');
+            }
+        }).catch(err => {
+            console.error('Copy error:', err);
+            showAlert('Copy failed: ' + err.message, 'error');
         });
     });
 });
@@ -1108,6 +1437,7 @@ chrome.storage.sync.get([
     'buttercup_translate',
     'buttercup_cache',
     'buttercup_download_srt',
+    'buttercup_auto_transcribe',
     'buttercup_groq_api_key',
     'buttercup_groq_model',
     'buttercup_use_word_timestamps',
@@ -1119,13 +1449,20 @@ chrome.storage.sync.get([
     'buttercup_llm_target_language',
     'buttercup_llm_provider',
     'buttercup_llm_api_key',
-    'buttercup_llm_model'
+    'buttercup_llm_model',
+    'buttercup_caption_font_size',
+    'buttercup_caption_position',
+    'buttercup_caption_font_color',
+    'buttercup_caption_bg_color',
+    'buttercup_caption_bg_opacity',
+    'buttercup_dark_mode'
 ], (result) => {
     // General settings
     enabled.checked = result.buttercup_enabled !== false;
     translate.checked = result.buttercup_translate === true;
     cache.checked = result.buttercup_cache !== false;
     download.checked = result.buttercup_download_srt === true;
+    autoTranscribe.checked = result.buttercup_auto_transcribe === true;
     if (result.buttercup_language) {
         language.value = result.buttercup_language;
     }
@@ -1185,6 +1522,40 @@ chrome.storage.sync.get([
     if (result.buttercup_response_format) {
         responseFormat.value = result.buttercup_response_format;
     }
+
+    // Caption Customization settings
+    if (result.buttercup_caption_font_size !== undefined) {
+        captionFontSize.value = result.buttercup_caption_font_size;
+        fontSizeValue.textContent = result.buttercup_caption_font_size;
+    }
+
+    if (result.buttercup_caption_position) {
+        captionPosition.value = result.buttercup_caption_position;
+    }
+
+    if (result.buttercup_caption_font_color) {
+        captionFontColor.value = result.buttercup_caption_font_color;
+        captionFontColorText.value = result.buttercup_caption_font_color;
+    }
+
+    if (result.buttercup_caption_bg_color) {
+        captionBgColor.value = result.buttercup_caption_bg_color;
+        captionBgColorText.value = result.buttercup_caption_bg_color;
+    }
+
+    if (result.buttercup_caption_bg_opacity !== undefined) {
+        const opacityPercent = Math.round(result.buttercup_caption_bg_opacity * 100);
+        captionBgOpacity.value = opacityPercent;
+        captionOpacityValue.textContent = opacityPercent + '%';
+    }
+
+    // Update caption preview
+    updateCaptionPreview();
+
+    // Dark Mode setting
+    darkMode.checked = result.buttercup_dark_mode === true;
+    const theme = result.buttercup_dark_mode ? 'dark' : 'cupcake';
+    document.documentElement.setAttribute('data-theme', theme);
 });
 
 // Check if API keys are set and show a warning if not
