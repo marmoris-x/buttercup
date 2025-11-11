@@ -964,6 +964,15 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                     progressIndicator.completeStep(1);
                 }
 
+                // Display quality report if there are warnings
+                if (youtubeFormat.qualityReport && youtubeFormat.qualityReport.hasWarnings) {
+                    if (window.QualityReport) {
+                        const qualityReport = new window.QualityReport(youtubeFormat.qualityReport);
+                        window.buttercupQualityReport = qualityReport;
+                        console.info('[Buttercup] ⚠️ Quality warnings detected and displayed');
+                    }
+                }
+
                 customSubtitle = JSON.stringify(youtubeFormat);
 
                 let finalCaptionData = youtubeFormat;

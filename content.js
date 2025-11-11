@@ -36,6 +36,11 @@ const searchScript = document.createElement('script');
 searchScript.src = chrome.runtime.getURL('transcript-search.js');
 document.documentElement.prepend(searchScript);
 
+// Inject the quality report script
+const qualityScript = document.createElement('script');
+qualityScript.src = chrome.runtime.getURL('quality-report.js');
+document.documentElement.prepend(qualityScript);
+
 // Then inject the main script
 const mainScript = document.createElement('script');
 mainScript.src = chrome.runtime.getURL('buttercup.js');

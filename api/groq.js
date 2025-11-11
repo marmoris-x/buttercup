@@ -342,7 +342,7 @@ class GroqAPI {
             // Validate quality (enabled by default, set validateQuality: false to disable)
             const shouldValidate = options.validateQuality !== false; // Default: true
             if (shouldValidate && result.segments) {
-                this.validateTranscriptionQuality(result.segments);
+                result.qualityReport = this.validateTranscriptionQuality(result.segments);
             }
 
             return result;
@@ -463,7 +463,7 @@ class GroqAPI {
             // Validate quality (enabled by default, set validateQuality: false to disable)
             const shouldValidate = options.validateQuality !== false; // Default: true
             if (shouldValidate && result.segments) {
-                this.validateTranscriptionQuality(result.segments);
+                result.qualityReport = this.validateTranscriptionQuality(result.segments);
             }
 
             return result;
@@ -481,7 +481,7 @@ class GroqAPI {
     validateTranscriptionQuality(segments) {
         if (!segments || segments.length === 0) {
             console.warn('[Buttercup] No segments to validate');
-            return;
+            return null;
         }
 
         let lowConfidenceCount = 0;
@@ -568,6 +568,33 @@ class GroqAPI {
         } else {
             console.info('[Buttercup] ✅ Transcription quality looks good!');
         }
+
+        // Return quality data for UI display
+        const hasWarnings = issues.length > 0;
+        const warnings = [];
+
+        if (lowConfidenceCount > segments.length * this.qualityThresholds.lowConfidencePercent) {
+            warnings.push(`${lowConfidenceCount} segments have low confidence scores`);
+        }
+
+        if (highNoSpeechCount > segments.length * this.qualityThresholds.highNoSpeechPercent) {
+            warnings.push(`${highNoSpeechCount} segments may contain non-speech audio`);
+        }
+
+        if (unusualCompressionCount > segments.length * this.qualityThresholds.unusualCompressionPercent) {
+            warnings.push(`${unusualCompressionCount} segments have unusual speech patterns`);
+        }
+
+        return {
+            hasWarnings,
+            warnings,
+            stats: {
+                totalSegments: segments.length,
+                lowConfidenceSegments: lowConfidenceCount,
+                noSpeechSegments: highNoSpeechCount,
+                unusualCompressionSegments: unusualCompressionCount
+            }
+        };
     }
 
     /**

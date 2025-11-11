@@ -25,6 +25,7 @@
                 "summary-sidebar.js",
                 "progress-indicator.js",
                 "transcript-search.js",
+                "quality-report.js",
                 "api/cobalt.js",
                 "api/groq.js",
                 "api/config.js",
