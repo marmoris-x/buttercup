@@ -31,6 +31,11 @@ const progressScript = document.createElement('script');
 progressScript.src = chrome.runtime.getURL('progress-indicator.js');
 document.documentElement.prepend(progressScript);
 
+// Inject the transcript search script
+const searchScript = document.createElement('script');
+searchScript.src = chrome.runtime.getURL('transcript-search.js');
+document.documentElement.prepend(searchScript);
+
 // Then inject the main script
 const mainScript = document.createElement('script');
 mainScript.src = chrome.runtime.getURL('buttercup.js');

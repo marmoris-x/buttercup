@@ -24,6 +24,7 @@
                 "caption-overlay.js",
                 "summary-sidebar.js",
                 "progress-indicator.js",
+                "transcript-search.js",
                 "api/cobalt.js",
                 "api/groq.js",
                 "api/config.js",

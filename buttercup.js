@@ -780,6 +780,13 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                                     const captionOverlay = new window.CustomCaptionOverlay(savedTranscript.captionData);
                                     window.buttercupCaptionOverlay = captionOverlay;
                                     console.info('[Buttercup] ✓ Caption overlay created from saved transcript');
+
+                                    // Create transcript search interface
+                                    if (window.TranscriptSearch) {
+                                        const transcriptSearch = new window.TranscriptSearch(savedTranscript.captionData);
+                                        window.buttercupTranscriptSearch = transcriptSearch;
+                                        console.info('[Buttercup] ✓ Transcript search initialized (Press Ctrl+F to search)');
+                                    }
                                 }
 
                                 // Show summary sidebar if exists
@@ -1030,6 +1037,13 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
 
                         // Store reference globally so it can be toggled later if needed
                         window.buttercupCaptionOverlay = captionOverlay;
+
+                        // Create transcript search interface
+                        if (window.TranscriptSearch) {
+                            const transcriptSearch = new window.TranscriptSearch(finalCaptionData);
+                            window.buttercupTranscriptSearch = transcriptSearch;
+                            console.info('[Buttercup] ✓ Transcript search initialized (Press Ctrl+F to search)');
+                        }
 
                         // Mark caption creation as complete
                         if (progressIndicator) {
