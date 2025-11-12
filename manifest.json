@@ -27,6 +27,7 @@
                 "transcript-search.js",
                 "quality-report.js",
                 "logger.js",
+                "rate-limiter.js",
                 "api/cobalt.js",
                 "api/groq.js",
                 "api/config.js",

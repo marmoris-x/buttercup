@@ -351,41 +351,54 @@ Output ${texts.length} lines below (numbered format is fine):`;
     async translateWithOpenAI(prompt, expectedCount) {
         console.info('[LLMTranslation] Using OpenAI API');
 
-        // Wrap API call in retry logic
-        return await this.retryWithBackoff(async () => {
-            const response = await fetch('https://api.openai.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${this.apiKey}`
-                },
-                body: JSON.stringify({
-                    model: this.model,
-                    messages: [
-                        { role: 'system', content: 'You are a professional subtitle translator. Output exactly the requested number of lines, one translation per line. Use the full video context to ensure accurate translations.' },
-                        { role: 'user', content: prompt }
-                    ],
-                    max_completion_tokens: 128000
-                })
-            });
+        // Use rate limiter if available, otherwise fall back to direct call
+        const executeRequest = async () => {
+            // Wrap API call in retry logic
+            return await this.retryWithBackoff(async () => {
+                const response = await fetch('https://api.openai.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${this.apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: this.model,
+                        messages: [
+                            { role: 'system', content: 'You are a professional subtitle translator. Output exactly the requested number of lines, one translation per line. Use the full video context to ensure accurate translations.' },
+                            { role: 'user', content: prompt }
+                        ],
+                        max_completion_tokens: 128000
+                    })
+                });
 
-            if (!response.ok) {
-                const error = await response.text();
-                throw this.parseLLMError('openai', response, error);
-            }
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw this.parseLLMError('openai', response, error);
+                }
 
-            const data = await response.json();
-            const translatedText = data.choices[0].message.content;
+                const data = await response.json();
+                const translatedText = data.choices[0].message.content;
 
-            return this.parseTranslationResponse(translatedText, expectedCount);
-        }, 3, 2000); // 3 retries, starting with 2 second delay
+                return this.parseTranslationResponse(translatedText, expectedCount);
+            }, 3, 2000); // 3 retries, starting with 2 second delay
+        };
+
+        // Execute through rate limiter if available
+        return window.rateLimiterManager
+            ? await window.rateLimiterManager.execute('openai', executeRequest, {
+                priority: 'normal',
+                estimatedTokens: expectedCount * 100 // Rough estimate: 100 tokens per translation
+            })
+            : await executeRequest();
     }
 
     async translateWithGemini(prompt, expectedCount) {
         console.info('[LLMTranslation] Using Gemini API');
 
-        // Wrap API call in retry logic
-        return await this.retryWithBackoff(async () => {
+        // Use rate limiter if available, otherwise fall back to direct call
+        const executeRequest = async () => {
+            // Wrap API call in retry logic
+            return await this.retryWithBackoff(async () => {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/${this.model}:generateContent?key=${this.apiKey}`;
 
             const response = await fetch(url, {
@@ -436,49 +449,71 @@ Output ${texts.length} lines below (numbered format is fine):`;
             console.log('[LLMTranslation] Raw Gemini text (first 500 chars):', translatedText.substring(0, 500));
 
             return this.parseTranslationResponse(translatedText, expectedCount);
-        }, 3, 2000); // 3 retries, starting with 2 second delay
+            }, 3, 2000); // 3 retries, starting with 2 second delay
+        };
+
+        // Execute through rate limiter if available
+        return window.rateLimiterManager
+            ? await window.rateLimiterManager.execute('gemini', executeRequest, {
+                priority: 'normal',
+                estimatedTokens: expectedCount * 100
+            })
+            : await executeRequest();
     }
 
     async translateWithClaude(prompt, expectedCount) {
         console.info('[LLMTranslation] Using Claude API');
 
-        // Wrap API call in retry logic
-        return await this.retryWithBackoff(async () => {
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': this.apiKey,
-                    'anthropic-version': '2023-06-01'
-                },
-                body: JSON.stringify({
-                    model: this.model,
-                    max_tokens: 4000,
-                    temperature: 0.3,
-                    messages: [{
-                        role: 'user',
-                        content: prompt
-                    }]
-                })
-            });
+        // Use rate limiter if available, otherwise fall back to direct call
+        const executeRequest = async () => {
+            // Wrap API call in retry logic
+            return await this.retryWithBackoff(async () => {
+                const response = await fetch('https://api.anthropic.com/v1/messages', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-api-key': this.apiKey,
+                        'anthropic-version': '2023-06-01'
+                    },
+                    body: JSON.stringify({
+                        model: this.model,
+                        max_tokens: 4000,
+                        temperature: 0.3,
+                        messages: [{
+                            role: 'user',
+                            content: prompt
+                        }]
+                    })
+                });
 
-            if (!response.ok) {
-                const error = await response.text();
-                throw this.parseLLMError('claude', response, error);
-            }
+                if (!response.ok) {
+                    const error = await response.text();
+                    throw this.parseLLMError('claude', response, error);
+                }
 
-            const data = await response.json();
-            const translatedText = data.content[0].text;
+                const data = await response.json();
+                const translatedText = data.content[0].text;
 
-            return this.parseTranslationResponse(translatedText, expectedCount);
-        }, 3, 2000); // 3 retries, starting with 2 second delay
+                return this.parseTranslationResponse(translatedText, expectedCount);
+            }, 3, 2000); // 3 retries, starting with 2 second delay
+        };
+
+        // Execute through rate limiter if available
+        return window.rateLimiterManager
+            ? await window.rateLimiterManager.execute('claude', executeRequest, {
+                priority: 'normal',
+                estimatedTokens: expectedCount * 100
+            })
+            : await executeRequest();
     }
 
     async translateWithOpenRouter(prompt, expectedCount) {
         console.info('[LLMTranslation] Using OpenRouter API');
 
-        // Wrap API call in retry logic
-        return await this.retryWithBackoff(async () => {
+        // Use rate limiter if available, otherwise fall back to direct call
+        const executeRequest = async () => {
+            // Wrap API call in retry logic
+            return await this.retryWithBackoff(async () => {
             const response = await fetch('https://openrouter.ai/api/v1/chat/completions', {
                 method: 'POST',
                 headers: {
@@ -507,7 +542,16 @@ Output ${texts.length} lines below (numbered format is fine):`;
             const translatedText = data.choices[0].message.content;
 
             return this.parseTranslationResponse(translatedText, expectedCount);
-        }, 3, 2000); // 3 retries, starting with 2 second delay
+            }, 3, 2000); // 3 retries, starting with 2 second delay
+        };
+
+        // Execute through rate limiter if available
+        return window.rateLimiterManager
+            ? await window.rateLimiterManager.execute('openrouter', executeRequest, {
+                priority: 'normal',
+                estimatedTokens: expectedCount * 100
+            })
+            : await executeRequest();
     }
 
     /**

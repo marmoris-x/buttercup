@@ -304,30 +304,41 @@ class GroqAPI {
 
             console.info('[Buttercup] Sending transcription request with parameters:', params);
 
-            // Wrap API call in retry logic
-            const result = await this.retryWithBackoff(async () => {
-                const response = await fetch(`${this.baseUrl}/transcriptions`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${this.apiKey}`
-                    },
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('[Buttercup] Groq API error response:', {
-                        status: response.status,
-                        statusText: response.statusText,
-                        error: errorText
+            // Use rate limiter if available, otherwise fall back to direct call
+            const executeRequest = async () => {
+                // Wrap API call in retry logic
+                return await this.retryWithBackoff(async () => {
+                    const response = await fetch(`${this.baseUrl}/transcriptions`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${this.apiKey}`
+                        },
+                        body: formData
                     });
+
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('[Buttercup] Groq API error response:', {
+                            status: response.status,
+                            statusText: response.statusText,
+                            error: errorText
+                        });
 
                     // Parse error with helpful message
                     throw this.parseApiError(response, errorText);
                 }
 
                 return await response.json();
-            }, 3, 2000); // 3 retries, starting with 2 second delay
+                }, 3, 2000); // 3 retries, starting with 2 second delay
+            };
+
+            // Execute through rate limiter if available
+            const result = window.rateLimiterManager
+                ? await window.rateLimiterManager.execute('groq', executeRequest, {
+                    priority: 'high',
+                    estimatedTokens: 7000 // Typical transcription token usage
+                })
+                : await executeRequest();
 
             // Log detailed response information
             console.info('[Buttercup] Groq API transcription response:', {
@@ -425,30 +436,41 @@ class GroqAPI {
 
             console.info('[Buttercup] Sending translation request with parameters:', params);
 
-            // Wrap API call in retry logic
-            const result = await this.retryWithBackoff(async () => {
-                const response = await fetch(`${this.baseUrl}/translations`, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${this.apiKey}`
-                    },
-                    body: formData
-                });
-
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('[Buttercup] Groq API error response:', {
-                        status: response.status,
-                        statusText: response.statusText,
-                        error: errorText
+            // Use rate limiter if available, otherwise fall back to direct call
+            const executeRequest = async () => {
+                // Wrap API call in retry logic
+                return await this.retryWithBackoff(async () => {
+                    const response = await fetch(`${this.baseUrl}/translations`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': `Bearer ${this.apiKey}`
+                        },
+                        body: formData
                     });
 
-                    // Parse error with helpful message
-                    throw this.parseApiError(response, errorText);
-                }
+                    if (!response.ok) {
+                        const errorText = await response.text();
+                        console.error('[Buttercup] Groq API error response:', {
+                            status: response.status,
+                            statusText: response.statusText,
+                            error: errorText
+                        });
 
-                return await response.json();
-            }, 3, 2000); // 3 retries, starting with 2 second delay
+                        // Parse error with helpful message
+                        throw this.parseApiError(response, errorText);
+                    }
+
+                    return await response.json();
+                }, 3, 2000); // 3 retries, starting with 2 second delay
+            };
+
+            // Execute through rate limiter if available
+            const result = window.rateLimiterManager
+                ? await window.rateLimiterManager.execute('groq', executeRequest, {
+                    priority: 'high',
+                    estimatedTokens: 7000 // Typical translation token usage
+                })
+                : await executeRequest();
 
             // Log detailed response information
             console.info('[Buttercup] Groq API translation response:', {

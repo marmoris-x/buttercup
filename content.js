@@ -3,6 +3,11 @@ const loggerScript = document.createElement('script');
 loggerScript.src = chrome.runtime.getURL('logger.js');
 document.documentElement.prepend(loggerScript);
 
+// Inject rate limiter - must be available before API scripts
+const rateLimiterScript = document.createElement('script');
+rateLimiterScript.src = chrome.runtime.getURL('rate-limiter.js');
+document.documentElement.prepend(rateLimiterScript);
+
 // Create and inject API scripts
 const apiScripts = [
     'api/cobalt.js',
