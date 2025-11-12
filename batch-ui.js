@@ -47,7 +47,7 @@ class BatchUI {
                 <!-- Add Videos Section -->
                 <div class="form-control">
                     <label class="label">
-                        <span class="label-text font-semibold">➕ Add Videos to Batch</span>
+                        <span class="label-text font-semibold">Add Videos to Batch</span>
                     </label>
                     <textarea id="batch-urls" class="textarea textarea-bordered h-20 text-xs"
                               placeholder="Paste YouTube URLs (one per line)&#10;https://www.youtube.com/watch?v=...&#10;https://youtu.be/...&#10;or just video IDs"></textarea>
@@ -58,20 +58,20 @@ class BatchUI {
                         Add to Queue
                     </button>
                     <button id="batch-paste" class="btn btn-sm btn-outline">
-                        📋 Paste from Clipboard
+                        Paste from Clipboard
                     </button>
                 </div>
 
                 <!-- Control Buttons -->
                 <div class="grid grid-cols-3 gap-2">
                     <button id="batch-start" class="btn btn-sm btn-success" disabled>
-                        ▶️ Start
+                        Start
                     </button>
                     <button id="batch-pause" class="btn btn-sm btn-warning" disabled>
-                        ⏸️ Pause
+                        Pause
                     </button>
                     <button id="batch-clear" class="btn btn-sm btn-error btn-outline">
-                        🗑️ Clear All
+                        Clear All
                     </button>
                 </div>
 
@@ -290,12 +290,12 @@ class BatchUI {
 
         if (startBtn) {
             startBtn.disabled = !hasVideos || (this.isRunning && !this.isPaused);
-            startBtn.textContent = this.isRunning && !this.isPaused ? '▶️ Running...' : '▶️ Start';
+            startBtn.textContent = this.isRunning && !this.isPaused ? 'Running...' : 'Start';
         }
 
         if (pauseBtn) {
             pauseBtn.disabled = !this.isRunning;
-            pauseBtn.textContent = this.isPaused ? '▶️ Resume' : '⏸️ Pause';
+            pauseBtn.textContent = this.isPaused ? 'Resume' : 'Pause';
         }
 
         // Update progress info
@@ -347,10 +347,10 @@ class BatchUI {
 
         listEl.innerHTML = allVideos.map(video => {
             const statusIcon = {
-                pending: '⏳',
-                processing: '🔄',
-                completed: '✅',
-                failed: '❌'
+                pending: '[P]',
+                processing: '[R]',
+                completed: '[C]',
+                failed: '[F]'
             }[video.status];
 
             const statusColor = {

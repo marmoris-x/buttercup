@@ -548,5 +548,5 @@ class BatchProcessor {
 if (typeof window !== 'undefined') {
     window.BatchProcessor = BatchProcessor;
     window.batchProcessor = new BatchProcessor();
-    console.log('[Buttercup] 🔄 Batch processor initialized');
+    console.log('[Buttercup] Batch processor initialized');
 }

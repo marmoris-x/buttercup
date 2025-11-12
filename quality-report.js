@@ -54,7 +54,7 @@ class QualityReport {
             <div style="display: flex; justify-between; align-items: start; margin-bottom: 12px;">
                 <div>
                     <div style="font-size: 16px; font-weight: 700; color: #fff; margin-bottom: 4px; display: flex; align-items: center; gap: 6px;">
-                        ⚠️ Transcription Quality Warning
+                        Transcription Quality Warning
                     </div>
                     <div style="font-size: 12px; color: rgba(255, 255, 255, 0.9);">
                         Some segments may have low confidence
@@ -95,7 +95,7 @@ class QualityReport {
             ` : ''}
 
             <div style="font-size: 11px; color: rgba(255, 255, 255, 0.9); padding: 8px; background: rgba(0, 0, 0, 0.15); border-radius: 6px;">
-                <strong>💡 Tip:</strong> For better results, try:
+                <strong>Tip:</strong> For better results, try:
                 <ul style="margin: 4px 0 0 16px; padding: 0;">
                     <li>Using a video with clearer audio</li>
                     <li>Re-transcribing with a different prompt</li>

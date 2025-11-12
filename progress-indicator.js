@@ -198,7 +198,7 @@ class ProgressIndicator {
                 margin-right: 8px;
                 font-size: 16px;
             `;
-            icon.innerHTML = '⏳';
+            icon.innerHTML = '[P]';
 
             const text = document.createElement('span');
             text.textContent = step;
@@ -258,7 +258,7 @@ class ProgressIndicator {
         const stepEl = document.getElementById(`buttercup-step-${stepIndex}`);
         if (stepEl) {
             const icon = stepEl.querySelector('span');
-            icon.innerHTML = '✅';
+            icon.innerHTML = '[C]';
             stepEl.style.color = '#4CAF50';
         }
 
@@ -282,7 +282,7 @@ class ProgressIndicator {
         const stepEl = document.getElementById(`buttercup-step-${stepIndex}`);
         if (stepEl) {
             const icon = stepEl.querySelector('span');
-            icon.innerHTML = '🔄';
+            icon.innerHTML = '[R]';
             stepEl.style.color = '#2196F3';
 
             // Spin animation
@@ -314,7 +314,7 @@ class ProgressIndicator {
         const stepEl = document.getElementById(`buttercup-step-${stepIndex}`);
         if (stepEl) {
             const icon = stepEl.querySelector('span');
-            icon.innerHTML = '❌';
+            icon.innerHTML = '[F]';
             icon.style.animation = 'none';
             stepEl.style.color = '#f44336';
         }

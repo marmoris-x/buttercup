@@ -13,11 +13,11 @@
 class ButtercupLogger {
     constructor() {
         this.LOG_LEVELS = {
-            DEBUG: { value: 0, label: 'DEBUG', icon: '🔍', color: '#868e96' },
-            INFO: { value: 1, label: 'INFO', icon: 'ℹ️', color: '#339af0' },
-            WARN: { value: 2, label: 'WARN', icon: '⚠️', color: '#ffd43b' },
-            ERROR: { value: 3, label: 'ERROR', icon: '❌', color: '#ff6b6b' },
-            SUCCESS: { value: 1, label: 'SUCCESS', icon: '✅', color: '#51cf66' }
+            DEBUG: { value: 0, label: 'DEBUG', icon: '[D]', color: '#868e96' },
+            INFO: { value: 1, label: 'INFO', icon: '[I]', color: '#339af0' },
+            WARN: { value: 2, label: 'WARN', icon: '[W]', color: '#ffd43b' },
+            ERROR: { value: 3, label: 'ERROR', icon: '[E]', color: '#ff6b6b' },
+            SUCCESS: { value: 1, label: 'SUCCESS', icon: '[S]', color: '#51cf66' }
         };
 
         this.currentLevel = this.LOG_LEVELS.INFO; // Default level

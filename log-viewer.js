@@ -49,7 +49,7 @@ class LogViewer {
                 <!-- Filters -->
                 <div class="form-control">
                     <label class="label">
-                        <span class="label-text font-semibold">🔍 Search Logs</span>
+                        <span class="label-text font-semibold">Search Logs</span>
                     </label>
                     <input type="text" id="log-search" placeholder="Search messages..."
                            class="input input-bordered input-sm w-full" />
@@ -62,11 +62,11 @@ class LogViewer {
                         </label>
                         <select id="log-level-filter" class="select select-bordered select-sm">
                             <option value="ALL">All Levels</option>
-                            <option value="DEBUG">🔍 Debug</option>
-                            <option value="INFO">ℹ️ Info</option>
-                            <option value="SUCCESS">✅ Success</option>
-                            <option value="WARN">⚠️ Warnings</option>
-                            <option value="ERROR">❌ Errors</option>
+                            <option value="DEBUG">Debug</option>
+                            <option value="INFO">Info</option>
+                            <option value="SUCCESS">Success</option>
+                            <option value="WARN">Warnings</option>
+                            <option value="ERROR">Errors</option>
                         </select>
                     </div>
 
@@ -91,20 +91,20 @@ class LogViewer {
                 <!-- Action buttons -->
                 <div class="grid grid-cols-3 gap-2">
                     <button id="export-logs-json" class="btn btn-sm btn-outline">
-                        📄 JSON
+                        JSON
                     </button>
                     <button id="export-logs-txt" class="btn btn-sm btn-outline">
-                        📝 TXT
+                        TXT
                     </button>
                     <button id="clear-logs" class="btn btn-sm btn-outline btn-error">
-                        🗑️ Clear
+                        Clear
                     </button>
                 </div>
 
                 <!-- Log Level Setting -->
                 <div class="form-control">
                     <label class="label py-1">
-                        <span class="label-text text-xs font-semibold">⚙️ Minimum Log Level</span>
+                        <span class="label-text text-xs font-semibold">Minimum Log Level</span>
                     </label>
                     <select id="log-level-setting" class="select select-bordered select-sm">
                         <option value="DEBUG">Debug (Show Everything)</option>
