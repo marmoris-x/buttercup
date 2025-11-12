@@ -1,3 +1,8 @@
+// Inject logger first - must be available before all other scripts
+const loggerScript = document.createElement('script');
+loggerScript.src = chrome.runtime.getURL('logger.js');
+document.documentElement.prepend(loggerScript);
+
 // Create and inject API scripts
 const apiScripts = [
     'api/cobalt.js',
@@ -9,7 +14,7 @@ const apiScripts = [
     'api/ai-summary.js'
 ];
 
-// Inject API scripts first
+// Inject API scripts after logger
 apiScripts.forEach(scriptPath => {
     const script = document.createElement('script');
     script.src = chrome.runtime.getURL(scriptPath);

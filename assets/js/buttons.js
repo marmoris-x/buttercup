@@ -92,10 +92,12 @@ const tabGeneral = document.getElementById('tab-general');
 const tabTranscript = document.getElementById('tab-transcript');
 const tabApi = document.getElementById('tab-api');
 const tabAdvanced = document.getElementById('tab-advanced');
+const tabLogs = document.getElementById('tab-logs');
 const generalTabContent = document.getElementById('general-tab');
 const transcriptTabContent = document.getElementById('transcript-tab');
 const apiTabContent = document.getElementById('api-tab');
 const advancedTabContent = document.getElementById('advanced-tab');
+const logsTabContent = document.getElementById('logs-tab');
 
 // Transcript tab elements
 const currentVideoIdEl = document.getElementById('current-video-id');
@@ -128,10 +130,12 @@ tabGeneral.addEventListener('click', () => {
     tabTranscript.classList.remove('tab-active');
     tabApi.classList.remove('tab-active');
     tabAdvanced.classList.remove('tab-active');
+    tabLogs.classList.remove('tab-active');
     generalTabContent.classList.remove('hidden');
     transcriptTabContent.classList.add('hidden');
     apiTabContent.classList.add('hidden');
     advancedTabContent.classList.add('hidden');
+    logsTabContent.classList.add('hidden');
 });
 
 tabTranscript.addEventListener('click', () => {
@@ -139,10 +143,12 @@ tabTranscript.addEventListener('click', () => {
     tabGeneral.classList.remove('tab-active');
     tabApi.classList.remove('tab-active');
     tabAdvanced.classList.remove('tab-active');
+    tabLogs.classList.remove('tab-active');
     transcriptTabContent.classList.remove('hidden');
     generalTabContent.classList.add('hidden');
     apiTabContent.classList.add('hidden');
     advancedTabContent.classList.add('hidden');
+    logsTabContent.classList.add('hidden');
     // Refresh transcript info when tab is opened
     refreshTranscriptInfo();
 });
@@ -152,10 +158,12 @@ tabApi.addEventListener('click', () => {
     tabGeneral.classList.remove('tab-active');
     tabTranscript.classList.remove('tab-active');
     tabAdvanced.classList.remove('tab-active');
+    tabLogs.classList.remove('tab-active');
     apiTabContent.classList.remove('hidden');
     generalTabContent.classList.add('hidden');
     transcriptTabContent.classList.add('hidden');
     advancedTabContent.classList.add('hidden');
+    logsTabContent.classList.add('hidden');
 });
 
 tabAdvanced.addEventListener('click', () => {
@@ -163,10 +171,32 @@ tabAdvanced.addEventListener('click', () => {
     tabGeneral.classList.remove('tab-active');
     tabTranscript.classList.remove('tab-active');
     tabApi.classList.remove('tab-active');
+    tabLogs.classList.remove('tab-active');
     advancedTabContent.classList.remove('hidden');
     generalTabContent.classList.add('hidden');
     transcriptTabContent.classList.add('hidden');
     apiTabContent.classList.add('hidden');
+    logsTabContent.classList.add('hidden');
+});
+
+tabLogs.addEventListener('click', () => {
+    tabLogs.classList.add('tab-active');
+    tabGeneral.classList.remove('tab-active');
+    tabTranscript.classList.remove('tab-active');
+    tabApi.classList.remove('tab-active');
+    tabAdvanced.classList.remove('tab-active');
+    logsTabContent.classList.remove('hidden');
+    generalTabContent.classList.add('hidden');
+    transcriptTabContent.classList.add('hidden');
+    apiTabContent.classList.add('hidden');
+    advancedTabContent.classList.add('hidden');
+
+    // Initialize or refresh log viewer
+    if (!window.logViewerInstance) {
+        window.logViewerInstance = new LogViewer('log-viewer-container');
+    } else {
+        window.logViewerInstance.refresh();
+    }
 });
 
 // Function to update translation availability based on selected model

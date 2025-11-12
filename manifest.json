@@ -26,6 +26,7 @@
                 "progress-indicator.js",
                 "transcript-search.js",
                 "quality-report.js",
+                "logger.js",
                 "api/cobalt.js",
                 "api/groq.js",
                 "api/config.js",
