@@ -201,6 +201,7 @@ async function init() {
         getButtercupEnabled,
         getButtercupDownloadSrt,
         getButtercupUseCache,
+        getButtercupAutoTranscribe,
         getButtercupApiSettings
     ]);
 }
@@ -212,7 +213,8 @@ document.addEventListener('buttercupSettingsChanged', async function () {
     document.dispatchEvent(new CustomEvent('requestButtercupEnabled', {}));
     document.dispatchEvent(new CustomEvent('requestButtercupDownloadSrt', {}));
     document.dispatchEvent(new CustomEvent('requestButtercupCache', {}));
-    await Promise.all([getButtercupTranslate, getButtercupEnabled, getButtercupDownloadSrt, getButtercupUseCache]);
+    document.dispatchEvent(new CustomEvent('requestButtercupAutoTranscribe', {}));
+    await Promise.all([getButtercupTranslate, getButtercupEnabled, getButtercupDownloadSrt, getButtercupUseCache, getButtercupAutoTranscribe]);
 });
 
 document.addEventListener('buttercupApiSettingsChanged', async function () {
