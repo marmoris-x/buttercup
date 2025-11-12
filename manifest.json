@@ -28,6 +28,7 @@
                 "quality-report.js",
                 "logger.js",
                 "rate-limiter.js",
+                "batch-processor.js",
                 "api/cobalt.js",
                 "api/groq.js",
                 "api/config.js",

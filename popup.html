@@ -86,12 +86,13 @@
             Buttercup's awesome Whisper-generated ones
         </p>
     </div>
-    <div role="tablist" class="tabs tabs-boxed mx-auto w-11/12" style="display: grid; grid-template-columns: repeat(5, 1fr); font-size: 0.8rem;">
+    <div role="tablist" class="tabs tabs-boxed mx-auto w-11/12" style="display: grid; grid-template-columns: repeat(6, 1fr); font-size: 0.7rem;">
         <a role="tab" class="tab tab-active" id="tab-general">General</a>
         <a role="tab" class="tab" id="tab-transcript">Transcript</a>
-        <a role="tab" class="tab" id="tab-api">API Setup</a>
+        <a role="tab" class="tab" id="tab-batch">🔄 Batch</a>
+        <a role="tab" class="tab" id="tab-api">API</a>
         <a role="tab" class="tab" id="tab-advanced">Advanced</a>
-        <a role="tab" class="tab" id="tab-logs">📝 Logs</a>
+        <a role="tab" class="tab" id="tab-logs">Logs</a>
     </div>
     
     <div class="content-container">
@@ -570,6 +571,11 @@
             <button class="btn btn-primary w-full mt-4 mb-4" id="save-advanced-settings">Save Advanced Settings</button>
         </div>
 
+        <!-- Batch Processing Tab -->
+        <div id="batch-tab" class="tab-content hidden">
+            <div id="batch-ui-container"></div>
+        </div>
+
         <!-- Logs Tab -->
         <div id="logs-tab" class="tab-content hidden">
             <div id="log-viewer-container"></div>
@@ -577,6 +583,7 @@
     </div>
 </body>
 
+<script src="batch-ui.js"></script>
 <script src="log-viewer.js"></script>
 <script src="assets/js/buttons.js"></script>
 

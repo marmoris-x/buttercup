@@ -90,11 +90,13 @@ const saveAdvancedSettings = document.getElementById('save-advanced-settings');
 // Tab navigation elements
 const tabGeneral = document.getElementById('tab-general');
 const tabTranscript = document.getElementById('tab-transcript');
+const tabBatch = document.getElementById('tab-batch');
 const tabApi = document.getElementById('tab-api');
 const tabAdvanced = document.getElementById('tab-advanced');
 const tabLogs = document.getElementById('tab-logs');
 const generalTabContent = document.getElementById('general-tab');
 const transcriptTabContent = document.getElementById('transcript-tab');
+const batchTabContent = document.getElementById('batch-tab');
 const apiTabContent = document.getElementById('api-tab');
 const advancedTabContent = document.getElementById('advanced-tab');
 const logsTabContent = document.getElementById('logs-tab');
@@ -128,11 +130,13 @@ const importFileInput = document.getElementById('import-file-input');
 tabGeneral.addEventListener('click', () => {
     tabGeneral.classList.add('tab-active');
     tabTranscript.classList.remove('tab-active');
+    tabBatch.classList.remove('tab-active');
     tabApi.classList.remove('tab-active');
     tabAdvanced.classList.remove('tab-active');
     tabLogs.classList.remove('tab-active');
     generalTabContent.classList.remove('hidden');
     transcriptTabContent.classList.add('hidden');
+    batchTabContent.classList.add('hidden');
     apiTabContent.classList.add('hidden');
     advancedTabContent.classList.add('hidden');
     logsTabContent.classList.add('hidden');
@@ -141,11 +145,13 @@ tabGeneral.addEventListener('click', () => {
 tabTranscript.addEventListener('click', () => {
     tabTranscript.classList.add('tab-active');
     tabGeneral.classList.remove('tab-active');
+    tabBatch.classList.remove('tab-active');
     tabApi.classList.remove('tab-active');
     tabAdvanced.classList.remove('tab-active');
     tabLogs.classList.remove('tab-active');
     transcriptTabContent.classList.remove('hidden');
     generalTabContent.classList.add('hidden');
+    batchTabContent.classList.add('hidden');
     apiTabContent.classList.add('hidden');
     advancedTabContent.classList.add('hidden');
     logsTabContent.classList.add('hidden');
@@ -153,15 +159,39 @@ tabTranscript.addEventListener('click', () => {
     refreshTranscriptInfo();
 });
 
+tabBatch.addEventListener('click', () => {
+    tabBatch.classList.add('tab-active');
+    tabGeneral.classList.remove('tab-active');
+    tabTranscript.classList.remove('tab-active');
+    tabApi.classList.remove('tab-active');
+    tabAdvanced.classList.remove('tab-active');
+    tabLogs.classList.remove('tab-active');
+    batchTabContent.classList.remove('hidden');
+    generalTabContent.classList.add('hidden');
+    transcriptTabContent.classList.add('hidden');
+    apiTabContent.classList.add('hidden');
+    advancedTabContent.classList.add('hidden');
+    logsTabContent.classList.add('hidden');
+
+    // Initialize or refresh batch UI
+    if (!window.batchUIInstance) {
+        window.batchUIInstance = new BatchUI('batch-ui-container');
+    } else {
+        window.batchUIInstance.refresh();
+    }
+});
+
 tabApi.addEventListener('click', () => {
     tabApi.classList.add('tab-active');
     tabGeneral.classList.remove('tab-active');
     tabTranscript.classList.remove('tab-active');
+    tabBatch.classList.remove('tab-active');
     tabAdvanced.classList.remove('tab-active');
     tabLogs.classList.remove('tab-active');
     apiTabContent.classList.remove('hidden');
     generalTabContent.classList.add('hidden');
     transcriptTabContent.classList.add('hidden');
+    batchTabContent.classList.add('hidden');
     advancedTabContent.classList.add('hidden');
     logsTabContent.classList.add('hidden');
 });
@@ -170,11 +200,13 @@ tabAdvanced.addEventListener('click', () => {
     tabAdvanced.classList.add('tab-active');
     tabGeneral.classList.remove('tab-active');
     tabTranscript.classList.remove('tab-active');
+    tabBatch.classList.remove('tab-active');
     tabApi.classList.remove('tab-active');
     tabLogs.classList.remove('tab-active');
     advancedTabContent.classList.remove('hidden');
     generalTabContent.classList.add('hidden');
     transcriptTabContent.classList.add('hidden');
+    batchTabContent.classList.add('hidden');
     apiTabContent.classList.add('hidden');
     logsTabContent.classList.add('hidden');
 });
@@ -183,11 +215,13 @@ tabLogs.addEventListener('click', () => {
     tabLogs.classList.add('tab-active');
     tabGeneral.classList.remove('tab-active');
     tabTranscript.classList.remove('tab-active');
+    tabBatch.classList.remove('tab-active');
     tabApi.classList.remove('tab-active');
     tabAdvanced.classList.remove('tab-active');
     logsTabContent.classList.remove('hidden');
     generalTabContent.classList.add('hidden');
     transcriptTabContent.classList.add('hidden');
+    batchTabContent.classList.add('hidden');
     apiTabContent.classList.add('hidden');
     advancedTabContent.classList.add('hidden');
 
