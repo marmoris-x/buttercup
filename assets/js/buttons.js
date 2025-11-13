@@ -1031,36 +1031,55 @@ exportSrt.addEventListener('click', () => {
         return;
     }
 
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (!tabs || !tabs[0]) return;
+    try {
+        // Parse the transcript data
+        const captionData = typeof currentTranscriptData.data === 'string'
+            ? JSON.parse(currentTranscriptData.data)
+            : currentTranscriptData.data;
 
-        chrome.scripting.executeScript({
-            target: { tabId: tabs[0].id },
-            func: () => {
-                if (window.transcriptStorage && window.buttercupCaptionOverlay) {
-                    const captionData = window.buttercupCaptionOverlay.captions
-                        ? { events: window.buttercupCaptionOverlay.captions }
-                        : null;
+        // Create temporary transcript storage instance
+        const storage = new (function() {
+            this.generateSRT = function(captionData) {
+                let srt = '';
+                let counter = 1;
 
-                    if (captionData) {
-                        const videoTitle = document.title.replace(' - YouTube', '');
-                        window.transcriptStorage.exportCaptions(captionData, 'srt', videoTitle);
-                        return { success: true };
-                    }
+                for (const event of captionData.events) {
+                    const startTime = this.formatSRTTime(event.tStartMs);
+                    const endTime = this.formatSRTTime(event.tStartMs + event.dDurationMs);
+                    const text = event.segs.map(seg => seg.utf8).join('');
+
+                    srt += `${counter}\n${startTime} --> ${endTime}\n${text}\n\n`;
+                    counter++;
                 }
-                return { success: false };
-            }
-        }).then(results => {
-            if (results && results[0]?.result?.success) {
-                showAlert('SRT file downloaded successfully', 'success');
-            } else {
-                showAlert('Failed to export SRT', 'error');
-            }
-        }).catch(err => {
-            console.error('Export error:', err);
-            showAlert('Export failed: ' + err.message, 'error');
+
+                return srt;
+            };
+
+            this.formatSRTTime = function(ms) {
+                const seconds = Math.floor(ms / 1000);
+                const milliseconds = ms % 1000;
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const secs = seconds % 60;
+
+                return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')},${String(milliseconds).padStart(3, '0')}`;
+            };
         });
-    });
+
+        const srtContent = storage.generateSRT(captionData);
+        const blob = new Blob([srtContent], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentTranscriptData.videoId || 'transcript'}.srt`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        showAlert('SRT file downloaded successfully', 'success');
+    } catch (err) {
+        console.error('Export error:', err);
+        showAlert('Export failed: ' + err.message, 'error');
+    }
 });
 
 exportVtt.addEventListener('click', () => {
@@ -1069,36 +1088,51 @@ exportVtt.addEventListener('click', () => {
         return;
     }
 
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (!tabs || !tabs[0]) return;
+    try {
+        const captionData = typeof currentTranscriptData.data === 'string'
+            ? JSON.parse(currentTranscriptData.data)
+            : currentTranscriptData.data;
 
-        chrome.scripting.executeScript({
-            target: { tabId: tabs[0].id },
-            func: () => {
-                if (window.transcriptStorage && window.buttercupCaptionOverlay) {
-                    const captionData = window.buttercupCaptionOverlay.captions
-                        ? { events: window.buttercupCaptionOverlay.captions }
-                        : null;
+        const storage = new (function() {
+            this.generateVTT = function(captionData) {
+                let vtt = 'WEBVTT\n\n';
 
-                    if (captionData) {
-                        const videoTitle = document.title.replace(' - YouTube', '');
-                        window.transcriptStorage.exportCaptions(captionData, 'vtt', videoTitle);
-                        return { success: true };
-                    }
+                for (const event of captionData.events) {
+                    const startTime = this.formatVTTTime(event.tStartMs);
+                    const endTime = this.formatVTTTime(event.tStartMs + event.dDurationMs);
+                    const text = event.segs.map(seg => seg.utf8).join('');
+
+                    vtt += `${startTime} --> ${endTime}\n${text}\n\n`;
                 }
-                return { success: false };
-            }
-        }).then(results => {
-            if (results && results[0]?.result?.success) {
-                showAlert('VTT file downloaded successfully', 'success');
-            } else {
-                showAlert('Failed to export VTT', 'error');
-            }
-        }).catch(err => {
-            console.error('Export error:', err);
-            showAlert('Export failed: ' + err.message, 'error');
+
+                return vtt;
+            };
+
+            this.formatVTTTime = function(ms) {
+                const seconds = Math.floor(ms / 1000);
+                const milliseconds = ms % 1000;
+                const hours = Math.floor(seconds / 3600);
+                const minutes = Math.floor((seconds % 3600) / 60);
+                const secs = seconds % 60;
+
+                return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}.${String(milliseconds).padStart(3, '0')}`;
+            };
         });
-    });
+
+        const vttContent = storage.generateVTT(captionData);
+        const blob = new Blob([vttContent], { type: 'text/vtt' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentTranscriptData.videoId || 'transcript'}.vtt`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        showAlert('VTT file downloaded successfully', 'success');
+    } catch (err) {
+        console.error('Export error:', err);
+        showAlert('Export failed: ' + err.message, 'error');
+    }
 });
 
 exportTxt.addEventListener('click', () => {
@@ -1107,36 +1141,30 @@ exportTxt.addEventListener('click', () => {
         return;
     }
 
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (!tabs || !tabs[0]) return;
+    try {
+        const captionData = typeof currentTranscriptData.data === 'string'
+            ? JSON.parse(currentTranscriptData.data)
+            : currentTranscriptData.data;
 
-        chrome.scripting.executeScript({
-            target: { tabId: tabs[0].id },
-            func: () => {
-                if (window.transcriptStorage && window.buttercupCaptionOverlay) {
-                    const captionData = window.buttercupCaptionOverlay.captions
-                        ? { events: window.buttercupCaptionOverlay.captions }
-                        : null;
+        let txt = '';
+        for (const event of captionData.events) {
+            const text = event.segs.map(seg => seg.utf8).join('');
+            txt += `${text}\n`;
+        }
 
-                    if (captionData) {
-                        const videoTitle = document.title.replace(' - YouTube', '');
-                        window.transcriptStorage.exportCaptions(captionData, 'txt', videoTitle, { includeTimestamps: false });
-                        return { success: true };
-                    }
-                }
-                return { success: false };
-            }
-        }).then(results => {
-            if (results && results[0]?.result?.success) {
-                showAlert('TXT file downloaded successfully', 'success');
-            } else {
-                showAlert('Failed to export TXT', 'error');
-            }
-        }).catch(err => {
-            console.error('Export error:', err);
-            showAlert('Export failed: ' + err.message, 'error');
-        });
-    });
+        const blob = new Blob([txt], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentTranscriptData.videoId || 'transcript'}.txt`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        showAlert('TXT file downloaded successfully', 'success');
+    } catch (err) {
+        console.error('Export error:', err);
+        showAlert('Export failed: ' + err.message, 'error');
+    }
 });
 
 exportJson.addEventListener('click', () => {
@@ -1145,74 +1173,65 @@ exportJson.addEventListener('click', () => {
         return;
     }
 
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (!tabs || !tabs[0]) return;
+    try {
+        const captionData = typeof currentTranscriptData.data === 'string'
+            ? JSON.parse(currentTranscriptData.data)
+            : currentTranscriptData.data;
 
-        chrome.scripting.executeScript({
-            target: { tabId: tabs[0].id },
-            func: () => {
-                if (window.transcriptStorage && window.buttercupCaptionOverlay) {
-                    const captionData = window.buttercupCaptionOverlay.captions
-                        ? { events: window.buttercupCaptionOverlay.captions }
-                        : null;
+        const jsonData = {
+            metadata: {
+                videoId: currentTranscriptData.videoId || 'unknown',
+                exportDate: new Date().toISOString(),
+                totalCaptions: captionData.events ? captionData.events.length : 0
+            },
+            captions: captionData.events ? captionData.events.map((event, index) => ({
+                index: index + 1,
+                startTime: event.tStartMs,
+                endTime: event.tStartMs + event.dDurationMs,
+                duration: event.dDurationMs,
+                text: event.segs.map(seg => seg.utf8).join('')
+            })) : []
+        };
 
-                    if (captionData) {
-                        const videoTitle = document.title.replace(' - YouTube', '');
-                        window.transcriptStorage.exportCaptions(captionData, 'json', videoTitle);
-                        return { success: true };
-                    }
-                }
-                return { success: false };
-            }
-        }).then(results => {
-            if (results && results[0]?.result?.success) {
-                showAlert('JSON file downloaded successfully', 'success');
-            } else {
-                showAlert('Failed to export JSON', 'error');
-            }
-        }).catch(err => {
-            console.error('Export error:', err);
-            showAlert('Export failed: ' + err.message, 'error');
-        });
-    });
+        const jsonContent = JSON.stringify(jsonData, null, 2);
+        const blob = new Blob([jsonContent], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${currentTranscriptData.videoId || 'transcript'}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+
+        showAlert('JSON file downloaded successfully', 'success');
+    } catch (err) {
+        console.error('Export error:', err);
+        showAlert('Export failed: ' + err.message, 'error');
+    }
 });
 
-copyToClipboard.addEventListener('click', () => {
+copyToClipboard.addEventListener('click', async () => {
     if (!currentTranscriptData) {
         showAlert('No transcript data available', 'error');
         return;
     }
 
-    chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
-        if (!tabs || !tabs[0]) return;
+    try {
+        const captionData = typeof currentTranscriptData.data === 'string'
+            ? JSON.parse(currentTranscriptData.data)
+            : currentTranscriptData.data;
 
-        chrome.scripting.executeScript({
-            target: { tabId: tabs[0].id },
-            func: async () => {
-                if (window.transcriptStorage && window.buttercupCaptionOverlay) {
-                    const captionData = window.buttercupCaptionOverlay.captions
-                        ? { events: window.buttercupCaptionOverlay.captions }
-                        : null;
+        let text = '';
+        for (const event of captionData.events) {
+            const textContent = event.segs.map(seg => seg.utf8).join('');
+            text += `${textContent}\n`;
+        }
 
-                    if (captionData) {
-                        const textContent = window.transcriptStorage.getClipboardContent(captionData, 'plain');
-                        const success = await window.transcriptStorage.copyToClipboard(textContent);
-                        return { success };
-                    }
-                }
-                return { success: false };
-            }
-        }).then(results => {
-            if (results && results[0]?.result?.success) {
-                showAlert('Copied to clipboard!', 'success');
-            } else {
-                showAlert('Failed to copy to clipboard', 'error');
-            }
-        }).catch(err => {
-            console.error('Copy error:', err);
-            showAlert('Copy failed: ' + err.message, 'error');
-        });
-    });
+        await navigator.clipboard.writeText(text);
+        showAlert('Copied to clipboard!', 'success');
+    } catch (err) {
+        console.error('Copy error:', err);
+        showAlert('Copy failed: ' + err.message, 'error');
+    }
 });
 
 // Generate AI Summary
