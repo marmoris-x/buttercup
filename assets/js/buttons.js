@@ -1024,6 +1024,15 @@ deleteTranscript.addEventListener('click', () => {
     });
 });
 
+// Helper function to sanitize filename
+function sanitizeFilename(filename) {
+    // Replace invalid filename characters with underscores
+    return filename
+        .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+        .replace(/\s+/g, '_')
+        .substring(0, 200); // Limit filename length
+}
+
 // Export Buttons Event Listeners
 exportSrt.addEventListener('click', () => {
     if (!currentTranscriptData) {
@@ -1071,7 +1080,8 @@ exportSrt.addEventListener('click', () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${currentTranscriptData.videoId || 'transcript'}.srt`;
+        const filename = sanitizeFilename(currentTranscriptData.videoTitle || currentTranscriptData.videoId || 'transcript');
+        a.download = `${filename}.srt`;
         a.click();
         URL.revokeObjectURL(url);
 
@@ -1089,9 +1099,9 @@ exportVtt.addEventListener('click', () => {
     }
 
     try {
-        const captionData = typeof currentTranscriptData.data === 'string'
-            ? JSON.parse(currentTranscriptData.data)
-            : currentTranscriptData.data;
+        const captionData = typeof currentTranscriptData.captionData === 'string'
+            ? JSON.parse(currentTranscriptData.captionData)
+            : currentTranscriptData.captionData;
 
         const storage = new (function() {
             this.generateVTT = function(captionData) {
@@ -1124,7 +1134,8 @@ exportVtt.addEventListener('click', () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${currentTranscriptData.videoId || 'transcript'}.vtt`;
+        const filename = sanitizeFilename(currentTranscriptData.videoTitle || currentTranscriptData.videoId || 'transcript');
+        a.download = `${filename}.vtt`;
         a.click();
         URL.revokeObjectURL(url);
 
@@ -1142,9 +1153,9 @@ exportTxt.addEventListener('click', () => {
     }
 
     try {
-        const captionData = typeof currentTranscriptData.data === 'string'
-            ? JSON.parse(currentTranscriptData.data)
-            : currentTranscriptData.data;
+        const captionData = typeof currentTranscriptData.captionData === 'string'
+            ? JSON.parse(currentTranscriptData.captionData)
+            : currentTranscriptData.captionData;
 
         let txt = '';
         for (const event of captionData.events) {
@@ -1156,7 +1167,8 @@ exportTxt.addEventListener('click', () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${currentTranscriptData.videoId || 'transcript'}.txt`;
+        const filename = sanitizeFilename(currentTranscriptData.videoTitle || currentTranscriptData.videoId || 'transcript');
+        a.download = `${filename}.txt`;
         a.click();
         URL.revokeObjectURL(url);
 
@@ -1174,9 +1186,9 @@ exportJson.addEventListener('click', () => {
     }
 
     try {
-        const captionData = typeof currentTranscriptData.data === 'string'
-            ? JSON.parse(currentTranscriptData.data)
-            : currentTranscriptData.data;
+        const captionData = typeof currentTranscriptData.captionData === 'string'
+            ? JSON.parse(currentTranscriptData.captionData)
+            : currentTranscriptData.captionData;
 
         const jsonData = {
             metadata: {
@@ -1198,7 +1210,8 @@ exportJson.addEventListener('click', () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${currentTranscriptData.videoId || 'transcript'}.json`;
+        const filename = sanitizeFilename(currentTranscriptData.videoTitle || currentTranscriptData.videoId || 'transcript');
+        a.download = `${filename}.json`;
         a.click();
         URL.revokeObjectURL(url);
 
@@ -1216,9 +1229,9 @@ copyToClipboard.addEventListener('click', async () => {
     }
 
     try {
-        const captionData = typeof currentTranscriptData.data === 'string'
-            ? JSON.parse(currentTranscriptData.data)
-            : currentTranscriptData.data;
+        const captionData = typeof currentTranscriptData.captionData === 'string'
+            ? JSON.parse(currentTranscriptData.captionData)
+            : currentTranscriptData.captionData;
 
         let text = '';
         for (const event of captionData.events) {
