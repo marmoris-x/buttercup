@@ -423,17 +423,6 @@ class GroqAPI {
                 formData.append('prompt', options.prompt);
             }
 
-            // Add timestamp granularities - always include segment
-            // Note: Must use response_format=verbose_json for this to work
-            if (options.responseFormat === 'verbose_json') {
-                formData.append('timestamp_granularities[]', 'segment');
-
-                // Add word-level timestamps if enabled
-                if (options.wordTimestamps) {
-                    formData.append('timestamp_granularities[]', 'word');
-                }
-            }
-
             console.info('[Buttercup] Sending translation request with parameters:', params);
 
             // Use rate limiter if available, otherwise fall back to direct call
