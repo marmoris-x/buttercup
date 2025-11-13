@@ -153,6 +153,7 @@ class BatchUI {
 
         const result = await chrome.scripting.executeScript({
             target: { tabId: results[0].id },
+            world: 'MAIN',
             func: async (urls) => {
                 if (!window.batchProcessor) {
                     return { success: false, error: 'Batch processor not available' };
@@ -194,6 +195,7 @@ class BatchUI {
 
         await chrome.scripting.executeScript({
             target: { tabId: results[0].id },
+            world: 'MAIN',
             func: async () => {
                 if (window.batchProcessor) {
                     await window.batchProcessor.start();
@@ -212,6 +214,7 @@ class BatchUI {
 
         await chrome.scripting.executeScript({
             target: { tabId: results[0].id },
+            world: 'MAIN',
             func: async (action) => {
                 if (window.batchProcessor) {
                     if (action === 'pause') {
@@ -237,6 +240,7 @@ class BatchUI {
 
         await chrome.scripting.executeScript({
             target: { tabId: results[0].id },
+            world: 'MAIN',
             func: async () => {
                 if (window.batchProcessor) {
                     await window.batchProcessor.clearAll();
