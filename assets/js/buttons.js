@@ -1033,9 +1033,9 @@ exportSrt.addEventListener('click', () => {
 
     try {
         // Parse the transcript data
-        const captionData = typeof currentTranscriptData.data === 'string'
-            ? JSON.parse(currentTranscriptData.data)
-            : currentTranscriptData.data;
+        const captionData = typeof currentTranscriptData.captionData === 'string'
+            ? JSON.parse(currentTranscriptData.captionData)
+            : currentTranscriptData.captionData;
 
         // Create temporary transcript storage instance
         const storage = new (function() {
