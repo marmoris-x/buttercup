@@ -5,7 +5,9 @@
     "description": "Replace YouTube auto captions with OpenAI Whisper-generated ones",
     "permissions": ["activeTab", "storage", "scripting", "clipboardRead"],
     "host_permissions": [
-        "https://www.youtube.com/*",
+        "*://*.youtube.com/*",
+        "*://youtube.com/*",
+        "*://youtu.be/*",
         "https://buttercup.igerman.cc/*",
         "https://api.groq.com/*",
         "http://127.0.0.1:8675/*"
