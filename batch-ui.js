@@ -181,30 +181,41 @@ class BatchUI {
             return;
         }
 
-        const result = await chrome.scripting.executeScript({
-            target: { tabId: youtubeTab.id },
-            world: 'MAIN',
-            func: async (urls) => {
-                if (!window.batchProcessor) {
-                    return { success: false, error: 'Batch processor not available' };
-                }
+        try {
+            const result = await chrome.scripting.executeScript({
+                target: { tabId: youtubeTab.id },
+                world: 'MAIN',
+                func: async (urls) => {
+                    if (!window.batchProcessor) {
+                        return { success: false, error: 'Batch processor not available' };
+                    }
 
-                try {
-                    const added = await window.batchProcessor.addVideos(urls);
-                    return { success: true, count: added.length };
-                } catch (error) {
-                    return { success: false, error: error.message };
-                }
-            },
-            args: [urls]
-        });
+                    try {
+                        console.log('[BatchUI] Adding videos:', urls);
+                        const added = await window.batchProcessor.addVideos(urls);
+                        console.log('[BatchUI] Videos added:', added);
+                        return { success: true, count: added.length };
+                    } catch (error) {
+                        console.error('[BatchUI] Error adding videos:', error);
+                        return { success: false, error: error.message };
+                    }
+                },
+                args: [urls]
+            });
 
-        if (result[0]?.result?.success) {
-            this.showAlert(`Added ${result[0].result.count} videos to queue`, 'success');
-            textarea.value = '';
-            await this.loadBatchState();
-        } else {
-            this.showAlert(`Failed to add videos: ${result[0]?.result?.error}`, 'error');
+            console.log('[BatchUI] ExecuteScript result:', result);
+
+            if (result && result[0]?.result?.success) {
+                this.showAlert(`Added ${result[0].result.count} videos to queue`, 'success');
+                textarea.value = '';
+                await this.loadBatchState();
+            } else {
+                const errorMsg = result && result[0]?.result?.error ? result[0].result.error : 'Unknown error';
+                this.showAlert(`Failed to add videos: ${errorMsg}`, 'error');
+            }
+        } catch (error) {
+            console.error('[BatchUI] Failed to execute script:', error);
+            this.showAlert(`Failed to add videos: ${error.message}`, 'error');
         }
     }
 
