@@ -453,24 +453,51 @@ class BatchProcessor {
      */
     async saveState() {
         try {
-            await chrome.storage.local.set({
-                buttercup_batch_processor: {
-                    queue: this.queue,
-                    completed: this.completed.map(v => ({
-                        videoId: v.videoId,
-                        title: v.title,
-                        completedAt: v.completedAt
-                    })),
-                    failed: this.failed.map(v => ({
-                        videoId: v.videoId,
-                        title: v.title,
-                        error: v.error,
-                        completedAt: v.completedAt
-                    })),
-                    stats: this.stats,
-                    isRunning: this.isRunning,
-                    isPaused: this.isPaused
-                }
+            const data = {
+                queue: this.queue,
+                completed: this.completed.map(v => ({
+                    videoId: v.videoId,
+                    title: v.title,
+                    completedAt: v.completedAt
+                })),
+                failed: this.failed.map(v => ({
+                    videoId: v.videoId,
+                    title: v.title,
+                    error: v.error,
+                    completedAt: v.completedAt
+                })),
+                stats: this.stats,
+                isRunning: this.isRunning,
+                isPaused: this.isPaused
+            };
+
+            // Use storage bridge to communicate with content script
+            return new Promise((resolve) => {
+                const requestId = `batch_save_${Date.now()}`;
+
+                const handler = (e) => {
+                    if (e.detail.requestId === requestId) {
+                        document.removeEventListener('buttercupStorageResponse', handler);
+                        resolve();
+                    }
+                };
+
+                document.addEventListener('buttercupStorageResponse', handler);
+
+                document.dispatchEvent(new CustomEvent('buttercupStorageRequest', {
+                    detail: {
+                        action: 'set',
+                        key: 'buttercup_batch_processor',
+                        data: data,
+                        requestId: requestId
+                    }
+                }));
+
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    document.removeEventListener('buttercupStorageResponse', handler);
+                    resolve();
+                }, 5000);
             });
         } catch (error) {
             console.error('[BatchProcessor] Failed to save state:', error);
@@ -482,23 +509,51 @@ class BatchProcessor {
      */
     async loadState() {
         try {
-            const result = await chrome.storage.local.get(['buttercup_batch_processor']);
-            const saved = result.buttercup_batch_processor;
+            // Use storage bridge to communicate with content script
+            return new Promise((resolve) => {
+                const requestId = `batch_load_${Date.now()}`;
 
-            if (saved) {
-                this.queue = saved.queue || [];
-                this.completed = saved.completed || [];
-                this.failed = saved.failed || [];
-                this.stats = saved.stats || this.stats;
-                this.isRunning = saved.isRunning || false;
-                this.isPaused = saved.isPaused || false;
+                const handler = (e) => {
+                    if (e.detail.requestId === requestId) {
+                        document.removeEventListener('buttercupStorageResponse', handler);
 
-                console.log('[BatchProcessor] Loaded saved state:', {
-                    queue: this.queue.length,
-                    completed: this.completed.length,
-                    failed: this.failed.length
-                });
-            }
+                        const saved = e.detail.data;
+
+                        if (saved && Object.keys(saved).length > 0) {
+                            this.queue = saved.queue || [];
+                            this.completed = saved.completed || [];
+                            this.failed = saved.failed || [];
+                            this.stats = saved.stats || this.stats;
+                            this.isRunning = saved.isRunning || false;
+                            this.isPaused = saved.isPaused || false;
+
+                            console.log('[BatchProcessor] Loaded saved state:', {
+                                queue: this.queue.length,
+                                completed: this.completed.length,
+                                failed: this.failed.length
+                            });
+                        }
+
+                        resolve();
+                    }
+                };
+
+                document.addEventListener('buttercupStorageResponse', handler);
+
+                document.dispatchEvent(new CustomEvent('buttercupStorageRequest', {
+                    detail: {
+                        action: 'get',
+                        key: 'buttercup_batch_processor',
+                        requestId: requestId
+                    }
+                }));
+
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    document.removeEventListener('buttercupStorageResponse', handler);
+                    resolve();
+                }, 5000);
+            });
         } catch (error) {
             console.error('[BatchProcessor] Failed to load state:', error);
         }
