@@ -259,19 +259,37 @@ class BatchProcessor {
             const videoInfo = await this.fetchVideoInfo(video.videoId);
             video.title = videoInfo.title || video.videoId;
 
+            // Wait for API config to be available (with timeout)
+            video.currentStep = 'Loading API configuration...';
+            this.notifyUpdate();
+
+            let apiConfigReady = false;
+            const maxWaitTime = 10000; // 10 seconds
+            const startWait = Date.now();
+
+            while (!apiConfigReady && (Date.now() - startWait) < maxWaitTime) {
+                if (window.apiConfig && window.apiConfig.hasAllApiKeys && window.apiConfig.hasAllApiKeys()) {
+                    apiConfigReady = true;
+                    break;
+                }
+
+                // Wait 100ms before checking again
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
             // Check if API config is available
             if (!window.apiConfig) {
-                throw new Error('API configuration not available');
+                throw new Error('API configuration not available. Please configure your API keys in the extension settings.');
             }
 
             // Check if we have all required API keys
             if (!window.apiConfig.hasAllApiKeys()) {
-                throw new Error('Missing required API keys');
+                throw new Error('Missing required API keys. Please configure your Groq API key in the extension settings.');
             }
 
             // Use transcription handler if available
             if (!window.transcriptionHandler) {
-                throw new Error('Transcription handler not available');
+                throw new Error('Transcription handler not available. Please reload the page.');
             }
 
             // Process video with progress callback
