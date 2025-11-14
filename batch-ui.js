@@ -174,49 +174,99 @@ class BatchUI {
             return;
         }
 
-        // Find a YouTube tab
-        const youtubeTab = await this.findYouTubeTab();
-        if (!youtubeTab) {
-            this.showAlert('Please open a YouTube tab first', 'warning');
+        // Extract video IDs directly in popup context
+        const videos = [];
+        for (const url of urls) {
+            const videoId = this.extractVideoId(url);
+            if (videoId) {
+                videos.push({
+                    videoId: videoId,
+                    url: url,
+                    title: `Video ${videoId}`,
+                    status: 'pending',
+                    progress: 0,
+                    currentStep: '',
+                    options: {},
+                    addedAt: Date.now(),
+                    startedAt: null,
+                    completedAt: null,
+                    error: null,
+                    result: null,
+                    retries: 0,
+                    maxRetries: 2
+                });
+            } else {
+                console.warn('[BatchUI] Invalid video URL:', url);
+            }
+        }
+
+        if (videos.length === 0) {
+            this.showAlert('No valid video URLs found', 'error');
             return;
         }
 
-        try {
-            const result = await chrome.scripting.executeScript({
-                target: { tabId: youtubeTab.id },
-                world: 'MAIN',
-                func: async (urls) => {
-                    if (!window.batchProcessor) {
-                        return { success: false, error: 'Batch processor not available' };
-                    }
+        // Load existing batch state
+        const result = await chrome.storage.local.get(['buttercup_batch_processor']);
+        const batchState = result.buttercup_batch_processor || {
+            queue: [],
+            completed: [],
+            failed: [],
+            stats: {
+                totalVideos: 0,
+                completedVideos: 0,
+                failedVideos: 0,
+                totalDuration: 0,
+                averageDuration: 0,
+                startTime: null,
+                endTime: null
+            },
+            isRunning: false,
+            isPaused: false
+        };
 
-                    try {
-                        console.log('[BatchUI] Adding videos:', urls);
-                        const added = await window.batchProcessor.addVideos(urls);
-                        console.log('[BatchUI] Videos added:', added);
-                        return { success: true, count: added.length };
-                    } catch (error) {
-                        console.error('[BatchUI] Error adding videos:', error);
-                        return { success: false, error: error.message };
-                    }
-                },
-                args: [urls]
-            });
+        // Check for duplicates and add new videos
+        let addedCount = 0;
+        for (const video of videos) {
+            const exists = batchState.queue.some(v => v.videoId === video.videoId) ||
+                          batchState.completed.some(v => v.videoId === video.videoId) ||
+                          batchState.failed.some(v => v.videoId === video.videoId);
 
-            console.log('[BatchUI] ExecuteScript result:', result);
-
-            if (result && result[0]?.result?.success) {
-                this.showAlert(`Added ${result[0].result.count} videos to queue`, 'success');
-                textarea.value = '';
-                await this.loadBatchState();
-            } else {
-                const errorMsg = result && result[0]?.result?.error ? result[0].result.error : 'Unknown error';
-                this.showAlert(`Failed to add videos: ${errorMsg}`, 'error');
+            if (!exists) {
+                batchState.queue.push(video);
+                addedCount++;
             }
-        } catch (error) {
-            console.error('[BatchUI] Failed to execute script:', error);
-            this.showAlert(`Failed to add videos: ${error.message}`, 'error');
         }
+
+        // Update stats
+        batchState.stats.totalVideos = batchState.queue.length + batchState.completed.length + batchState.failed.length;
+
+        // Save back to storage
+        await chrome.storage.local.set({ buttercup_batch_processor: batchState });
+
+        if (addedCount > 0) {
+            this.showAlert(`Added ${addedCount} video(s) to queue`, 'success');
+            textarea.value = '';
+            await this.loadBatchState();
+        } else {
+            this.showAlert('All videos already in queue', 'warning');
+        }
+    }
+
+    // Extract video ID from URL (copied from batch-processor.js)
+    extractVideoId(url) {
+        const patterns = [
+            /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]+)/,
+            /^([a-zA-Z0-9_-]{10,13})$/ // Direct video ID
+        ];
+
+        for (const pattern of patterns) {
+            const match = url.match(pattern);
+            if (match && match[1]) {
+                return match[1];
+            }
+        }
+
+        return null;
     }
 
     async pasteFromClipboard() {
