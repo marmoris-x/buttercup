@@ -94,14 +94,25 @@ class BatchUI {
     }
 
     async findYouTubeTab() {
-        // First, check if active tab is a YouTube tab
+        // First, check if active tab is a YouTube video tab
         const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (activeTabs[0] && activeTabs[0].url && activeTabs[0].url.includes('youtube.com')) {
-            return activeTabs[0];
+        if (activeTabs[0] && activeTabs[0].url) {
+            const url = activeTabs[0].url;
+            // Check if it's a video page (watch, shorts, or embed)
+            if (url.includes('youtube.com/watch') || url.includes('youtube.com/shorts') || url.includes('youtube.com/embed')) {
+                return activeTabs[0];
+            }
         }
 
-        // Otherwise, find any YouTube tab
+        // Otherwise, find any YouTube video tab
         const youtubeTabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
+        for (const tab of youtubeTabs) {
+            if (tab.url && (tab.url.includes('/watch') || tab.url.includes('/shorts') || tab.url.includes('/embed'))) {
+                return tab;
+            }
+        }
+
+        // No video tab found, return any YouTube tab
         if (youtubeTabs.length > 0) {
             return youtubeTabs[0];
         }
@@ -225,8 +236,19 @@ class BatchUI {
     async start() {
         const youtubeTab = await this.findYouTubeTab();
         if (!youtubeTab) {
-            this.showAlert('Please open a YouTube tab first', 'warning');
+            this.showAlert('Please open a YouTube video tab first', 'warning');
             return;
+        }
+
+        // Check if it's a video tab
+        const isVideoTab = youtubeTab.url && (
+            youtubeTab.url.includes('/watch') ||
+            youtubeTab.url.includes('/shorts') ||
+            youtubeTab.url.includes('/embed')
+        );
+
+        if (!isVideoTab) {
+            this.showAlert('Please open a YouTube video page (not just the homepage) for batch processing to work correctly', 'warning');
         }
 
         await chrome.scripting.executeScript({

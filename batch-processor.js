@@ -273,8 +273,14 @@ class BatchProcessor {
                     break;
                 }
 
-                // Wait 100ms before checking again
-                await new Promise(resolve => setTimeout(resolve, 100));
+                // Try to trigger API config initialization if not available
+                if (!window.apiConfig && typeof document !== 'undefined') {
+                    // Request API settings from content script
+                    document.dispatchEvent(new CustomEvent('requestButtercupApiSettings', {}));
+                }
+
+                // Wait 200ms before checking again
+                await new Promise(resolve => setTimeout(resolve, 200));
             }
 
             // Check if API config is available
