@@ -259,38 +259,51 @@ class BatchProcessor {
             const videoInfo = await this.fetchVideoInfo(video.videoId);
             video.title = videoInfo.title || video.videoId;
 
-            // Wait for API config to be available (with timeout)
+            // Initialize or wait for API config
             video.currentStep = 'Loading API configuration...';
             this.notifyUpdate();
 
-            let apiConfigReady = false;
-            const maxWaitTime = 10000; // 10 seconds
+            // If apiConfig doesn't exist, initialize it
+            if (!window.apiConfig && window.APIConfig) {
+                // Request API settings and wait for response
+                const apiSettings = await new Promise((resolve, reject) => {
+                    const timeout = setTimeout(() => {
+                        reject(new Error('API settings request timeout'));
+                    }, 5000);
+
+                    document.addEventListener('responseButtercupApiSettings', function handler(e) {
+                        clearTimeout(timeout);
+                        document.removeEventListener('responseButtercupApiSettings', handler);
+                        resolve(e.detail);
+                    });
+
+                    document.dispatchEvent(new CustomEvent('requestButtercupApiSettings', {}));
+                });
+
+                // Initialize API config with received settings
+                window.apiConfig = new window.APIConfig();
+                window.apiConfig.initFromSettings(apiSettings);
+            }
+
+            // Wait for API config to have all required keys (with timeout)
+            const maxWaitTime = 5000; // 5 seconds
             const startWait = Date.now();
 
-            while (!apiConfigReady && (Date.now() - startWait) < maxWaitTime) {
+            while ((Date.now() - startWait) < maxWaitTime) {
                 if (window.apiConfig && window.apiConfig.hasAllApiKeys && window.apiConfig.hasAllApiKeys()) {
-                    apiConfigReady = true;
                     break;
                 }
-
-                // Try to trigger API config initialization if not available
-                if (!window.apiConfig && typeof document !== 'undefined') {
-                    // Request API settings from content script
-                    document.dispatchEvent(new CustomEvent('requestButtercupApiSettings', {}));
-                }
-
-                // Wait 200ms before checking again
                 await new Promise(resolve => setTimeout(resolve, 200));
             }
 
-            // Check if API config is available
+            // Final check if API config is available
             if (!window.apiConfig) {
-                throw new Error('API configuration not available. Please configure your API keys in the extension settings.');
+                throw new Error('API configuration not available. Please open a YouTube video page and try again.');
             }
 
             // Check if we have all required API keys
             if (!window.apiConfig.hasAllApiKeys()) {
-                throw new Error('Missing required API keys. Please configure your Groq API key in the extension settings.');
+                throw new Error('Missing required API keys. Please configure your Groq API key in the API tab of the extension settings.');
             }
 
             // Use transcription handler if available
