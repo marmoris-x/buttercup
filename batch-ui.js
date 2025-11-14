@@ -93,6 +93,22 @@ class BatchUI {
         `;
     }
 
+    async findYouTubeTab() {
+        // First, check if active tab is a YouTube tab
+        const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
+        if (activeTabs[0] && activeTabs[0].url && activeTabs[0].url.includes('youtube.com')) {
+            return activeTabs[0];
+        }
+
+        // Otherwise, find any YouTube tab
+        const youtubeTabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
+        if (youtubeTabs.length > 0) {
+            return youtubeTabs[0];
+        }
+
+        return null;
+    }
+
     attachEventListeners() {
         // Add videos button
         const addBtn = document.getElementById('batch-add');
@@ -147,12 +163,15 @@ class BatchUI {
             return;
         }
 
-        // Execute in content script context
-        const results = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!results[0]) return;
+        // Find a YouTube tab
+        const youtubeTab = await this.findYouTubeTab();
+        if (!youtubeTab) {
+            this.showAlert('Please open a YouTube tab first', 'warning');
+            return;
+        }
 
         const result = await chrome.scripting.executeScript({
-            target: { tabId: results[0].id },
+            target: { tabId: youtubeTab.id },
             world: 'MAIN',
             func: async (urls) => {
                 if (!window.batchProcessor) {
@@ -190,11 +209,14 @@ class BatchUI {
     }
 
     async start() {
-        const results = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!results[0]) return;
+        const youtubeTab = await this.findYouTubeTab();
+        if (!youtubeTab) {
+            this.showAlert('Please open a YouTube tab first', 'warning');
+            return;
+        }
 
         await chrome.scripting.executeScript({
-            target: { tabId: results[0].id },
+            target: { tabId: youtubeTab.id },
             world: 'MAIN',
             func: async () => {
                 if (window.batchProcessor) {
@@ -207,13 +229,16 @@ class BatchUI {
     }
 
     async togglePause() {
-        const results = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!results[0]) return;
+        const youtubeTab = await this.findYouTubeTab();
+        if (!youtubeTab) {
+            this.showAlert('Please open a YouTube tab first', 'warning');
+            return;
+        }
 
         const action = this.isPaused ? 'resume' : 'pause';
 
         await chrome.scripting.executeScript({
-            target: { tabId: results[0].id },
+            target: { tabId: youtubeTab.id },
             world: 'MAIN',
             func: async (action) => {
                 if (window.batchProcessor) {
@@ -235,18 +260,44 @@ class BatchUI {
             return;
         }
 
-        const results = await chrome.tabs.query({ active: true, currentWindow: true });
-        if (!results[0]) return;
+        // Clear directly in storage since we're in popup context
+        const emptyState = {
+            queue: [],
+            completed: [],
+            failed: [],
+            stats: {
+                totalVideos: 0,
+                completedVideos: 0,
+                failedVideos: 0,
+                totalDuration: 0,
+                averageDuration: 0,
+                startTime: null,
+                endTime: null
+            },
+            isRunning: false,
+            isPaused: false
+        };
 
-        await chrome.scripting.executeScript({
-            target: { tabId: results[0].id },
-            world: 'MAIN',
-            func: async () => {
-                if (window.batchProcessor) {
-                    await window.batchProcessor.clearAll();
-                }
+        await chrome.storage.local.set({ buttercup_batch_processor: emptyState });
+
+        // Also notify any YouTube tabs to update their batch processor
+        const tabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
+        for (const tab of tabs) {
+            try {
+                await chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    world: 'MAIN',
+                    func: async () => {
+                        if (window.batchProcessor) {
+                            // Reload state from storage
+                            await window.batchProcessor.loadState();
+                        }
+                    }
+                });
+            } catch (err) {
+                console.log('[BatchUI] Could not notify tab:', err);
             }
-        });
+        }
 
         await this.loadBatchState();
         this.showAlert('Cleared all videos', 'success');
