@@ -401,12 +401,24 @@ class BatchUI {
     }
 
     showAlert(message, type) {
-        const alertDiv = document.getElementById('alert');
-        if (alertDiv) {
-            alertDiv.textContent = message;
-            alertDiv.className = `alert alert-${type} mb-4`;
-            alertDiv.classList.remove('hidden');
-            setTimeout(() => alertDiv.classList.add('hidden'), 3000);
+        // Use the progress info area to show alerts
+        const progressInfo = document.getElementById('batch-progress-info');
+        const progressText = document.getElementById('batch-progress-text');
+
+        if (progressInfo && progressText) {
+            progressInfo.classList.remove('hidden', 'alert-info', 'alert-success', 'alert-warning', 'alert-error');
+            progressInfo.classList.add(`alert-${type}`);
+            progressText.textContent = message;
+
+            // Auto-hide after 3 seconds
+            setTimeout(() => {
+                if (!this.isRunning) {
+                    progressInfo.classList.add('hidden');
+                }
+            }, 3000);
+        } else {
+            // Fallback to console
+            console.log(`[BatchUI] ${type}: ${message}`);
         }
     }
 

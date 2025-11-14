@@ -23,6 +23,8 @@ class BatchProcessor {
         this.maxConcurrent = 2; // Process 2 videos at a time
         this.isRunning = false;
         this.isPaused = false;
+        this.isInitialized = false;
+        this.initPromise = null;
 
         // Statistics
         this.stats = {
@@ -36,7 +38,18 @@ class BatchProcessor {
         };
 
         // Load saved state
-        this.loadState();
+        this.initPromise = this.loadState().then(() => {
+            this.isInitialized = true;
+        });
+    }
+
+    /**
+     * Wait for initialization to complete
+     */
+    async waitForInit() {
+        if (!this.isInitialized && this.initPromise) {
+            await this.initPromise;
+        }
     }
 
     /**
@@ -45,6 +58,7 @@ class BatchProcessor {
      * @param {Object} options - Processing options (same as single transcription)
      */
     async addVideos(videoUrls, options = {}) {
+        await this.waitForInit();
         const added = [];
 
         for (const url of videoUrls) {
@@ -124,6 +138,7 @@ class BatchProcessor {
      * Start batch processing
      */
     async start() {
+        await this.waitForInit();
         if (this.isRunning && !this.isPaused) {
             console.warn('[BatchProcessor] Batch processing already running');
             return;
@@ -145,6 +160,7 @@ class BatchProcessor {
      * Pause batch processing
      */
     async pause() {
+        await this.waitForInit();
         this.isPaused = true;
 
         if (window.buttercupLogger) {
@@ -159,6 +175,7 @@ class BatchProcessor {
      * Resume batch processing
      */
     async resume() {
+        await this.waitForInit();
         if (!this.isRunning) {
             await this.start();
         } else {
@@ -177,6 +194,7 @@ class BatchProcessor {
      * Stop batch processing
      */
     async stop() {
+        await this.waitForInit();
         this.isRunning = false;
         this.isPaused = false;
         this.stats.endTime = Date.now();
@@ -386,6 +404,7 @@ class BatchProcessor {
      * Clear all videos
      */
     async clearAll() {
+        await this.waitForInit();
         this.queue = [];
         this.currentlyProcessing = [];
         this.completed = [];
