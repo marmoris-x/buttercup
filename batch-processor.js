@@ -120,13 +120,13 @@ class BatchProcessor {
     extractVideoId(url) {
         // Handle different YouTube URL formats
         const patterns = [
-            /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
-            /^([a-zA-Z0-9_-]{11})$/ // Direct video ID
+            /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]+)/,
+            /^([a-zA-Z0-9_-]{10,13})$/ // Direct video ID (10-13 chars)
         ];
 
         for (const pattern of patterns) {
             const match = url.match(pattern);
-            if (match) {
+            if (match && match[1]) {
                 return match[1];
             }
         }
