@@ -198,13 +198,27 @@ class BatchUI {
     }
 
     async pasteFromClipboard() {
+        const textarea = document.getElementById('batch-urls');
+
+        // Focus the textarea
+        textarea.focus();
+
         try {
+            // Try navigator.clipboard API
             const text = await navigator.clipboard.readText();
-            const textarea = document.getElementById('batch-urls');
-            textarea.value = text;
-            this.showAlert('Pasted from clipboard', 'success');
+            if (text) {
+                // Append to existing content or replace
+                if (textarea.value.trim()) {
+                    textarea.value += '\n' + text;
+                } else {
+                    textarea.value = text;
+                }
+                this.showAlert('Pasted from clipboard', 'success');
+            }
         } catch (error) {
-            this.showAlert('Failed to paste from clipboard', 'error');
+            // If clipboard API fails, show instruction
+            console.log('[BatchUI] Clipboard API access denied:', error.message);
+            this.showAlert('Focused field - now press Ctrl+V (or Cmd+V) to paste', 'info');
         }
     }
 
