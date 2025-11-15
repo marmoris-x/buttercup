@@ -447,7 +447,7 @@ class BatchUI {
             if (saved) {
                 this.videos = {
                     pending: saved.queue || [],
-                    processing: [],
+                    processing: saved.currentlyProcessing || [],
                     completed: saved.completed || [],
                     failed: saved.failed || []
                 };

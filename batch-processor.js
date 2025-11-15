@@ -511,6 +511,7 @@ class BatchProcessor {
         try {
             const data = {
                 queue: this.queue,
+                currentlyProcessing: this.currentlyProcessing,
                 completed: this.completed.map(v => ({
                     videoId: v.videoId,
                     title: v.title,
@@ -577,6 +578,7 @@ class BatchProcessor {
 
                         if (saved && Object.keys(saved).length > 0) {
                             this.queue = saved.queue || [];
+                            this.currentlyProcessing = saved.currentlyProcessing || [];
                             this.completed = saved.completed || [];
                             this.failed = saved.failed || [];
                             this.stats = saved.stats || this.stats;
@@ -585,6 +587,7 @@ class BatchProcessor {
 
                             console.log('[BatchProcessor] Loaded saved state:', {
                                 queue: this.queue.length,
+                                processing: this.currentlyProcessing.length,
                                 completed: this.completed.length,
                                 failed: this.failed.length
                             });
