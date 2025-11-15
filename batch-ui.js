@@ -295,9 +295,18 @@ class BatchUI {
     }
 
     async start() {
+        // Load batch state first
+        const result = await chrome.storage.local.get(['buttercup_batch_processor']);
+        const batchState = result.buttercup_batch_processor;
+
+        if (!batchState || batchState.queue.length === 0) {
+            this.showAlert('No videos in queue to process', 'warning');
+            return;
+        }
+
         const youtubeTab = await this.findYouTubeTab();
         if (!youtubeTab) {
-            this.showAlert('Please open a YouTube video tab first', 'warning');
+            this.showAlert('Please open a YouTube video tab to start batch processing', 'warning');
             return;
         }
 
@@ -309,18 +318,48 @@ class BatchUI {
         );
 
         if (!isVideoTab) {
-            this.showAlert('Please open a YouTube video page (not just the homepage) for batch processing to work correctly', 'warning');
+            this.showAlert('Please open a YouTube VIDEO page (not just the homepage) to start batch processing', 'warning');
+            return;
         }
 
-        await chrome.scripting.executeScript({
-            target: { tabId: youtubeTab.id },
-            world: 'MAIN',
-            func: async () => {
-                if (window.batchProcessor) {
-                    await window.batchProcessor.start();
+        // Set running state in storage first
+        batchState.isRunning = true;
+        batchState.isPaused = false;
+        await chrome.storage.local.set({ buttercup_batch_processor: batchState });
+
+        try {
+            const result = await chrome.scripting.executeScript({
+                target: { tabId: youtubeTab.id },
+                world: 'MAIN',
+                func: async () => {
+                    if (!window.batchProcessor) {
+                        return { success: false, error: 'Batch processor not loaded. Please reload the YouTube video page.' };
+                    }
+                    try {
+                        await window.batchProcessor.start();
+                        return { success: true };
+                    } catch (error) {
+                        return { success: false, error: error.message };
+                    }
                 }
+            });
+
+            if (result && result[0]?.result?.success) {
+                this.showAlert('Batch processing started', 'success');
+            } else {
+                const error = result && result[0]?.result?.error ? result[0].result.error : 'Unknown error';
+                this.showAlert(error, 'error');
+                // Reset running state
+                batchState.isRunning = false;
+                await chrome.storage.local.set({ buttercup_batch_processor: batchState });
             }
-        });
+        } catch (error) {
+            console.error('[BatchUI] Failed to start batch processing:', error);
+            this.showAlert(`Failed to start: ${error.message}`, 'error');
+            // Reset running state
+            batchState.isRunning = false;
+            await chrome.storage.local.set({ buttercup_batch_processor: batchState });
+        }
 
         await this.loadBatchState();
     }
