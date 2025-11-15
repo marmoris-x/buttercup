@@ -5,6 +5,7 @@
     "description": "Replace YouTube auto captions with OpenAI Whisper-generated ones",
     "permissions": ["activeTab", "tabs", "storage", "scripting", "clipboardRead"],
     "host_permissions": [
+        "<all_urls>",
         "*://*.youtube.com/*",
         "*://youtube.com/*",
         "*://youtu.be/*",
