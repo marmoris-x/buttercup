@@ -389,6 +389,15 @@ class BatchProcessor {
             if (translateOption && video.options.llmApiKey && video.options.llmModel && video.options.targetLanguage) {
                 try {
                     console.log('[BatchProcessor] 🌐 Starting LLM translation to:', video.options.targetLanguage);
+                    console.log('[BatchProcessor] Translation settings:', {
+                        provider: video.options.provider || 'openai',
+                        model: video.options.llmModel,
+                        targetLanguage: video.options.targetLanguage,
+                        hasApiKey: !!video.options.llmApiKey,
+                        videoTitle: video.title,
+                        eventCount: video.result.events ? video.result.events.length : 0
+                    });
+
                     video.currentStep = `Translating to ${video.options.targetLanguage}...`;
                     video.progress = 80;
                     this.notifyUpdate();
@@ -413,12 +422,22 @@ class BatchProcessor {
                             : 'Unknown'
                     };
 
+                    console.log('[BatchProcessor] Video context for translation:', videoContext);
+
                     // Translate the caption events
                     const translatedEvents = await translator.translateCaptions(
                         video.result.events,
                         video.options.targetLanguage,
                         videoContext
                     );
+
+                    // Log sample of translated events for debugging
+                    if (translatedEvents && translatedEvents.length > 0) {
+                        console.log('[BatchProcessor] Sample translated event:', {
+                            original: video.result.events[0].segs.map(s => s.utf8).join(''),
+                            translated: translatedEvents[0].segs.map(s => s.utf8).join('')
+                        });
+                    }
 
                     // Update caption data with translations
                     finalCaptionData = {
