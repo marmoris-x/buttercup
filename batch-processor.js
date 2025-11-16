@@ -384,6 +384,65 @@ class BatchProcessor {
                 );
             });
 
+            // Apply LLM translation if enabled and configured
+            let finalCaptionData = video.result;
+            if (translateOption && video.options.llmApiKey && video.options.llmModel && video.options.targetLanguage) {
+                try {
+                    console.log('[BatchProcessor] 🌐 Starting LLM translation to:', video.options.targetLanguage);
+                    video.currentStep = `Translating to ${video.options.targetLanguage}...`;
+                    video.progress = 80;
+                    this.notifyUpdate();
+                    this.saveState();
+
+                    if (!window.LLMTranslation) {
+                        throw new Error('LLMTranslation class not available. Make sure llm-translation.js is loaded.');
+                    }
+
+                    // Create LLM translation instance
+                    const translator = new window.LLMTranslation(
+                        video.options.provider || 'openai',
+                        video.options.llmApiKey,
+                        video.options.llmModel
+                    );
+
+                    // Build video context for better translation
+                    const videoContext = {
+                        title: video.title || 'Unknown',
+                        duration: video.result.events && video.result.events.length > 0
+                            ? `${Math.round(video.result.events[video.result.events.length - 1].tStartMs / 1000)}s`
+                            : 'Unknown'
+                    };
+
+                    // Translate the caption events
+                    const translatedEvents = await translator.translateCaptions(
+                        video.result.events,
+                        video.options.targetLanguage,
+                        videoContext
+                    );
+
+                    // Update caption data with translations
+                    finalCaptionData = {
+                        ...video.result,
+                        events: translatedEvents
+                    };
+
+                    // Update video.result with translated data
+                    video.result = finalCaptionData;
+
+                    console.log('[BatchProcessor] ✓ LLM translation complete for:', video.videoId);
+                } catch (translationError) {
+                    console.error('[BatchProcessor] ⚠️ LLM translation failed:', translationError);
+                    console.log('[BatchProcessor] Continuing with untranslated transcript');
+                    // Continue with untranslated transcript
+                }
+            } else if (translateOption) {
+                console.log('[BatchProcessor] Translation requested but LLM settings incomplete:', {
+                    hasApiKey: !!video.options.llmApiKey,
+                    hasModel: !!video.options.llmModel,
+                    targetLanguage: video.options.targetLanguage
+                });
+            }
+
             // IMPORTANT: Save transcript to persistent storage for later use
             // This allows the transcript to be loaded when visiting the video page
             console.log('[BatchProcessor] video.result after transcription:', video.result ? 'exists' : 'NULL');

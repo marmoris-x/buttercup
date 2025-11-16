@@ -174,6 +174,33 @@ class BatchUI {
             return;
         }
 
+        // Load translation settings from sync storage
+        const translationSettings = await new Promise((resolve) => {
+            chrome.storage.sync.get([
+                'buttercup_llm_translation_enabled',
+                'buttercup_llm_target_language',
+                'buttercup_llm_provider',
+                'buttercup_llm_api_key',
+                'buttercup_llm_model'
+            ], (result) => {
+                resolve({
+                    translate: result.buttercup_llm_translation_enabled === true,
+                    targetLanguage: result.buttercup_llm_target_language || 'English',
+                    provider: result.buttercup_llm_provider || 'openai',
+                    apiKey: result.buttercup_llm_api_key || '',
+                    model: result.buttercup_llm_model || ''
+                });
+            });
+        });
+
+        console.log('[BatchUI] Using translation settings:', {
+            translate: translationSettings.translate,
+            targetLanguage: translationSettings.targetLanguage,
+            provider: translationSettings.provider,
+            hasApiKey: !!translationSettings.apiKey,
+            model: translationSettings.model
+        });
+
         // Extract video IDs directly in popup context
         const videos = [];
         for (const url of urls) {
@@ -186,7 +213,13 @@ class BatchUI {
                     status: 'pending',
                     progress: 0,
                     currentStep: '',
-                    options: {},
+                    options: {
+                        translate: translationSettings.translate,
+                        targetLanguage: translationSettings.targetLanguage,
+                        provider: translationSettings.provider,
+                        llmApiKey: translationSettings.apiKey,
+                        llmModel: translationSettings.model
+                    },
                     addedAt: Date.now(),
                     startedAt: null,
                     completedAt: null,
