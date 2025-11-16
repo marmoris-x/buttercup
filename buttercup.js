@@ -945,9 +945,17 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
             console.warn('[Buttercup] Error extracting video title:', error);
             videoTitle = 'buttercup_subtitles';
         }
-        
+
+        // For non-YouTube sites, pass the full URL instead of just video ID
+        // This allows yt-dlp to handle the download for any supported platform
+        const hostname = window.location.hostname;
+        const isYouTube = hostname.includes('youtube.com') || hostname.includes('youtu.be');
+        const videoUrlOrId = isYouTube ? videoId : window.location.href;
+
+        console.info('[Buttercup] Processing video:', { isYouTube, videoUrlOrId: videoUrlOrId.substring(0, 100) });
+
         transcriptionHandler.processVideo(
-            videoId,
+            videoUrlOrId,
             TRANSLATE,
             // Progress callback
             (message) => {
@@ -1198,13 +1206,70 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
     function getVideoId() {
         const urlObject = new URL(window.location.href);
         const pathname = urlObject.pathname;
-        if (pathname.startsWith('/clip')) {
-            return document.querySelector("meta[itemprop='videoId']").content;
-        } else {
-            if (pathname.startsWith('/shorts')) {
+        const hostname = urlObject.hostname;
+
+        // YouTube
+        if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
+            if (pathname.startsWith('/clip')) {
+                return document.querySelector("meta[itemprop='videoId']").content;
+            } else if (pathname.startsWith('/shorts')) {
                 return pathname.slice(8);
             }
-            return urlObject.searchParams.get('v');
+            return urlObject.searchParams.get('v') || pathname.slice(1); // youtu.be/ID
         }
+
+        // Vimeo
+        if (hostname.includes('vimeo.com')) {
+            const match = pathname.match(/\/(\d+)/);
+            return match ? match[1] : null;
+        }
+
+        // Dailymotion
+        if (hostname.includes('dailymotion.com')) {
+            const match = pathname.match(/\/video\/([a-zA-Z0-9]+)/);
+            return match ? match[1] : null;
+        }
+
+        // Twitter/X
+        if (hostname.includes('twitter.com') || hostname.includes('x.com')) {
+            const match = pathname.match(/\/status\/(\d+)/);
+            return match ? match[1] : null;
+        }
+
+        // TikTok
+        if (hostname.includes('tiktok.com')) {
+            const match = pathname.match(/\/video\/(\d+)/);
+            return match ? match[1] : null;
+        }
+
+        // Instagram
+        if (hostname.includes('instagram.com')) {
+            const match = pathname.match(/\/(?:p|reel|tv)\/([a-zA-Z0-9_-]+)/);
+            return match ? match[1] : null;
+        }
+
+        // Facebook - use URL hash as ID
+        if (hostname.includes('facebook.com') || hostname.includes('fb.watch')) {
+            // Facebook video URLs have the video ID in the path
+            const match = pathname.match(/\/videos\/.*?(\d+)/);
+            if (match) return match[1];
+            // Fallback: generate hash from full URL
+            let hash = 0;
+            const url = window.location.href;
+            for (let i = 0; i < url.length; i++) {
+                hash = ((hash << 5) - hash) + url.charCodeAt(i);
+                hash = hash & hash;
+            }
+            return Math.abs(hash).toString(36);
+        }
+
+        // For any other site, generate ID from URL
+        let hash = 0;
+        const url = window.location.href;
+        for (let i = 0; i < url.length; i++) {
+            hash = ((hash << 5) - hash) + url.charCodeAt(i);
+            hash = hash & hash;
+        }
+        return Math.abs(hash).toString(36);
     }
 })();
