@@ -733,7 +733,7 @@ startTranscription.addEventListener('click', async () => {
         }
 
         // Check if it's a YouTube tab
-        if (!tab.url || !tab.url.includes('youtube.com/watch')) {
+        if (!tab.url || !isYouTubeVideoUrl(tab.url)) {
             showAlert('Please open a YouTube video first', 'warning');
             return;
         }
@@ -761,6 +761,12 @@ startTranscription.addEventListener('click', async () => {
 
 let currentTranscriptData = null;
 
+// Helper function to check if URL is a valid YouTube video (watch or shorts)
+function isYouTubeVideoUrl(url) {
+    if (!url) return false;
+    return url.includes('youtube.com/watch') || url.includes('youtube.com/shorts');
+}
+
 // Helper function to extract video ID from URL
 function getVideoIdFromTab(tab) {
     if (!tab || !tab.url) return null;
@@ -782,7 +788,7 @@ async function refreshTranscriptInfo() {
         // Get current tab
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-        if (!tab || !tab.url || !tab.url.includes('youtube.com/watch')) {
+        if (!tab || !tab.url || !isYouTubeVideoUrl(tab.url)) {
             currentVideoIdEl.textContent = 'Not on a YouTube video';
             transcriptStatusBadge.textContent = 'N/A';
             transcriptStatusBadge.className = 'badge badge-sm badge-warning';
@@ -1446,7 +1452,7 @@ showExistingSummary.addEventListener('click', async () => {
         }
 
         // Check if it's a YouTube tab
-        if (!tab.url || !tab.url.includes('youtube.com/watch')) {
+        if (!tab.url || !isYouTubeVideoUrl(tab.url)) {
             showAlert('Please open a YouTube video to view the summary', 'warning');
             return;
         }
