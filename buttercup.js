@@ -1259,8 +1259,9 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
 
         // Facebook - use URL hash as ID
         if (hostname.includes('facebook.com') || hostname.includes('fb.watch')) {
-            // Facebook video URLs have the video ID in the path
-            const match = pathname.match(/\/videos\/.*?(\d+)/);
+            // Facebook video URLs have the numeric ID at end of path
+            // Use [0-9] instead of \d to avoid matching Arabic numerals
+            const match = pathname.match(/\/([0-9]+)\/?$/);
             if (match) return match[1];
             // Fallback: generate hash from full URL
             let hash = 0;

@@ -844,7 +844,8 @@ function getVideoIdFromTab(tab) {
 
     // Facebook
     if (hostname.includes('facebook.com') || hostname.includes('fb.watch')) {
-        const match = pathname.match(/\/videos\/.*?(\d+)/);
+        // Match numeric ID at end of path (use [0-9] to avoid matching Arabic numerals)
+        const match = pathname.match(/\/([0-9]+)\/?$/);
         if (match) return match[1];
         // Fallback: use URL hash
     }
