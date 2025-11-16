@@ -344,26 +344,32 @@ class BatchProcessor {
                 throw new Error('Transcription handler not available. Please reload the page.');
             }
 
-            // Process video with progress callback
-            const result = await window.transcriptionHandler.processVideo(
-                video.videoId,
-                {
-                    ...video.options,
-                    onProgress: (progress, status) => {
+            // Process video with correct parameter order:
+            // processVideo(videoId, translate, onProgress, onSuccess, onError)
+            const translateOption = video.options.translate || false;
+
+            await new Promise((resolve, reject) => {
+                window.transcriptionHandler.processVideo(
+                    video.videoId,
+                    translateOption,
+                    // onProgress callback
+                    (progress, status) => {
                         video.progress = progress;
-                        video.currentStep = status;
+                        video.currentStep = status || 'Processing...';
                         this.notifyUpdate();
+                        this.saveState();
+                    },
+                    // onSuccess callback
+                    (youtubeFormat) => {
+                        video.result = youtubeFormat;
+                        resolve(youtubeFormat);
+                    },
+                    // onError callback
+                    (error) => {
+                        reject(error);
                     }
-                },
-                (youtubeFormat) => {
-                    // Success callback
-                    video.result = youtubeFormat;
-                },
-                (error) => {
-                    // Error callback
-                    throw error;
-                }
-            );
+                );
+            });
 
             // Mark as completed
             video.status = 'completed';
