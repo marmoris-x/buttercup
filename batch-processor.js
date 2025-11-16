@@ -390,8 +390,13 @@ class BatchProcessor {
             if (video.result && window.transcriptStorage) {
                 try {
                     console.log('[BatchProcessor] Saving transcript to storage...');
+                    // Generate SRT data from captionData for the view/edit modal
+                    const srtData = window.transcriptStorage.generateSRT(video.result);
+                    console.log('[BatchProcessor] Generated SRT data:', srtData ? `${srtData.length} chars` : 'FAILED');
+
                     await window.transcriptStorage.saveTranscript(video.videoId, {
                         captionData: video.result,
+                        srtData: srtData,  // Include generated SRT data
                         videoTitle: video.title,
                         translationEnabled: translateOption,
                         targetLanguage: video.options.targetLanguage || '',
