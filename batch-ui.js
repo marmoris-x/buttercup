@@ -152,6 +152,41 @@ class BatchUI {
             return true;
         }
 
+        // Facebook
+        if ((url.includes('facebook.com/') || url.includes('fb.watch')) && (url.includes('/videos/') || url.includes('/watch') || url.includes('/reel'))) {
+            return true;
+        }
+
+        // Twitch
+        if (url.includes('twitch.tv/videos/') || url.includes('twitch.tv/clip/')) {
+            return true;
+        }
+
+        // Reddit
+        if (url.includes('reddit.com/') && url.includes('/comments/')) {
+            return true;
+        }
+
+        // SoundCloud
+        if (url.includes('soundcloud.com/')) {
+            return true;
+        }
+
+        // Bilibili
+        if (url.includes('bilibili.com/video/')) {
+            return true;
+        }
+
+        // Rumble
+        if (url.includes('rumble.com/')) {
+            return true;
+        }
+
+        // Odysee
+        if (url.includes('odysee.com/') || url.includes('lbry.tv/')) {
+            return true;
+        }
+
         return false;
     }
 

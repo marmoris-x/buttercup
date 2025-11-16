@@ -796,12 +796,42 @@ function isVideoPageUrl(url) {
     }
 
     // Facebook
-    if (url.includes('facebook.com/') && (url.includes('/videos/') || url.includes('/watch'))) {
+    if ((url.includes('facebook.com/') || url.includes('fb.watch')) && (url.includes('/videos/') || url.includes('/watch') || url.includes('/reel'))) {
         return true;
     }
 
     // Twitch
-    if (url.includes('twitch.tv/videos/') || url.includes('twitch.tv/clip/')) {
+    if (url.includes('twitch.tv/videos/') || url.includes('twitch.tv/clip/') || (url.includes('twitch.tv/') && url.includes('/clip/'))) {
+        return true;
+    }
+
+    // Reddit
+    if (url.includes('reddit.com/') && (url.includes('/comments/') || url.includes('v.redd.it'))) {
+        return true;
+    }
+
+    // SoundCloud
+    if (url.includes('soundcloud.com/')) {
+        return true;
+    }
+
+    // Bilibili
+    if (url.includes('bilibili.com/video/')) {
+        return true;
+    }
+
+    // Rumble
+    if (url.includes('rumble.com/')) {
+        return true;
+    }
+
+    // Odysee/LBRY
+    if (url.includes('odysee.com/') || url.includes('lbry.tv/')) {
+        return true;
+    }
+
+    // PeerTube instances (common pattern)
+    if (url.includes('/videos/watch/')) {
         return true;
     }
 
@@ -861,6 +891,45 @@ function getVideoIdFromTab(tab) {
         return match ? match[1] : null;
     }
 
+    // Facebook
+    if (hostname.includes('facebook.com') || hostname.includes('fb.watch')) {
+        const match = pathname.match(/\/videos\/.*?(\d+)/);
+        if (match) return match[1];
+        // Fallback: use URL hash
+    }
+
+    // Twitch
+    if (hostname.includes('twitch.tv')) {
+        const videoMatch = pathname.match(/\/videos\/(\d+)/);
+        if (videoMatch) return videoMatch[1];
+        const clipMatch = pathname.match(/\/clip\/([a-zA-Z0-9_-]+)/);
+        if (clipMatch) return clipMatch[1];
+    }
+
+    // Reddit
+    if (hostname.includes('reddit.com')) {
+        const match = pathname.match(/\/comments\/([a-zA-Z0-9]+)/);
+        if (match) return match[1];
+    }
+
+    // Bilibili
+    if (hostname.includes('bilibili.com')) {
+        const match = pathname.match(/\/video\/(BV[a-zA-Z0-9]+|av\d+)/);
+        if (match) return match[1];
+    }
+
+    // Rumble
+    if (hostname.includes('rumble.com')) {
+        const match = pathname.match(/\/([a-zA-Z0-9-]+)\.html/);
+        if (match) return match[1];
+    }
+
+    // Odysee
+    if (hostname.includes('odysee.com')) {
+        const match = pathname.match(/\/@[^/]+\/([^/:]+)/);
+        if (match) return match[1];
+    }
+
     // Fallback: generate hash from URL
     let hash = 0;
     const str = tab.url;
@@ -869,6 +938,25 @@ function getVideoIdFromTab(tab) {
         hash = hash & hash;
     }
     return Math.abs(hash).toString(36);
+}
+
+// Get platform name from URL
+function getPlatformName(url) {
+    if (!url) return 'Unknown';
+    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'YouTube';
+    if (url.includes('vimeo.com')) return 'Vimeo';
+    if (url.includes('dailymotion.com') || url.includes('dai.ly')) return 'Dailymotion';
+    if (url.includes('twitter.com') || url.includes('x.com')) return 'Twitter/X';
+    if (url.includes('tiktok.com')) return 'TikTok';
+    if (url.includes('instagram.com')) return 'Instagram';
+    if (url.includes('facebook.com') || url.includes('fb.watch')) return 'Facebook';
+    if (url.includes('twitch.tv')) return 'Twitch';
+    if (url.includes('reddit.com') || url.includes('redd.it')) return 'Reddit';
+    if (url.includes('soundcloud.com')) return 'SoundCloud';
+    if (url.includes('bilibili.com')) return 'Bilibili';
+    if (url.includes('rumble.com')) return 'Rumble';
+    if (url.includes('odysee.com') || url.includes('lbry.tv')) return 'Odysee';
+    return 'Video';
 }
 
 // Refresh transcript info for current video
@@ -897,7 +985,9 @@ async function refreshTranscriptInfo() {
             return;
         }
 
-        currentVideoIdEl.textContent = videoId;
+        // Show platform and video ID
+        const platform = getPlatformName(tab.url);
+        currentVideoIdEl.textContent = `${platform}: ${videoId}`;
 
         // Load transcript from storage
         chrome.storage.local.get(['buttercup_transcripts'], (result) => {
