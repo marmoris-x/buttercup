@@ -140,18 +140,32 @@ class BatchProcessor {
     async start() {
         await this.waitForInit();
 
+        // Remember current in-memory running state before loading from storage
+        const wasRunning = this.isRunning;
+        const wasActuallyProcessing = this.currentlyProcessing.length > 0;
+
         // IMPORTANT: Reload state from storage before starting
         // This ensures we have the latest queue from the popup
         await this.loadState();
         console.log('[BatchProcessor] After reloading state, queue length:', this.queue.length);
+        console.log('[BatchProcessor] State after reload - isRunning:', this.isRunning, 'currentlyProcessing:', this.currentlyProcessing.length);
 
-        if (this.isRunning && !this.isPaused) {
-            console.warn('[BatchProcessor] Batch processing already running');
+        // Check if we're actually processing something (not just a stale flag)
+        if (wasActuallyProcessing && this.currentlyProcessing.length > 0) {
+            console.warn('[BatchProcessor] Batch processing already running with active videos');
             return;
+        }
+
+        // If isRunning is true but nothing is being processed, it's a stale state - reset it
+        if (this.isRunning && this.currentlyProcessing.length === 0 && this.queue.length > 0) {
+            console.log('[BatchProcessor] Resetting stale running state');
+            this.isRunning = false;
         }
 
         if (this.queue.length === 0) {
             console.warn('[BatchProcessor] No videos in queue to process');
+            this.isRunning = false;
+            await this.saveState();
             return;
         }
 
