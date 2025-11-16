@@ -371,6 +371,24 @@ class BatchProcessor {
                 );
             });
 
+            // IMPORTANT: Save transcript to persistent storage for later use
+            // This allows the transcript to be loaded when visiting the video page
+            if (video.result && window.transcriptStorage) {
+                try {
+                    await window.transcriptStorage.saveTranscript(video.videoId, {
+                        captionData: video.result,
+                        videoTitle: video.title,
+                        translationEnabled: translateOption,
+                        targetLanguage: video.options.targetLanguage || '',
+                        provider: video.options.provider || ''
+                    });
+                    console.log('[BatchProcessor] Transcript saved to storage for:', video.videoId);
+                } catch (storageError) {
+                    console.error('[BatchProcessor] Failed to save transcript to storage:', storageError);
+                    // Continue processing even if storage fails
+                }
+            }
+
             // Mark as completed
             video.status = 'completed';
             video.progress = 100;

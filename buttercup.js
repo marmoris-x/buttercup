@@ -254,6 +254,8 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
     // Initialize transcript storage
     if (window.TranscriptStorage) {
         transcriptStorage = new window.TranscriptStorage();
+        // Expose to window for batch processor access
+        window.transcriptStorage = transcriptStorage;
         console.info('[Buttercup] ✓ TranscriptStorage initialized');
     } else {
         console.error('[Buttercup] ✗ TranscriptStorage class not found!');
