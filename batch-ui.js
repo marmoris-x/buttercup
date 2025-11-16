@@ -624,6 +624,12 @@ class BatchUI {
         const progressInfo = document.getElementById('batch-progress-info');
         const progressText = document.getElementById('batch-progress-text');
 
+        if (!progressInfo || !progressText) {
+            // Elements not found, skip updating progress info
+            this.displayVideos();
+            return;
+        }
+
         if (this.isRunning && !this.isPaused) {
             progressInfo.classList.remove('hidden');
             progressInfo.classList.remove('alert-info');

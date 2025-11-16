@@ -33,9 +33,12 @@ class ButtercupLogger {
     async init() {
         // Load log level from settings
         try {
-            const result = await chrome.storage.sync.get(['buttercup_log_level']);
-            if (result.buttercup_log_level) {
-                this.currentLevel = this.LOG_LEVELS[result.buttercup_log_level] || this.LOG_LEVELS.INFO;
+            // Check if chrome.storage.sync is available
+            if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
+                const result = await chrome.storage.sync.get(['buttercup_log_level']);
+                if (result.buttercup_log_level) {
+                    this.currentLevel = this.LOG_LEVELS[result.buttercup_log_level] || this.LOG_LEVELS.INFO;
+                }
             }
         } catch (error) {
             console.error('[Logger] Failed to load log level:', error);
