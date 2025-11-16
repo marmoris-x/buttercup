@@ -352,15 +352,28 @@ class BatchProcessor {
                 window.transcriptionHandler.processVideo(
                     video.videoId,
                     translateOption,
-                    // onProgress callback
-                    (progress, status) => {
-                        video.progress = progress;
-                        video.currentStep = status || 'Processing...';
+                    // onProgress callback - transcription.js only passes status string as first param
+                    (statusText) => {
+                        video.currentStep = statusText || 'Processing...';
+                        // Map status to approximate progress percentage
+                        if (statusText && statusText.includes('Downloading')) {
+                            video.progress = 20;
+                        } else if (statusText && statusText.includes('Processing')) {
+                            video.progress = 40;
+                        } else if (statusText && (statusText.includes('Transcribing') || statusText.includes('Translating'))) {
+                            video.progress = 60;
+                        } else {
+                            video.progress = Math.min((video.progress || 0) + 10, 90);
+                        }
                         this.notifyUpdate();
                         this.saveState();
                     },
                     // onSuccess callback
                     (youtubeFormat) => {
+                        console.log('[BatchProcessor] onSuccess called, youtubeFormat:', youtubeFormat ? 'received' : 'NULL');
+                        if (youtubeFormat && youtubeFormat.events) {
+                            console.log('[BatchProcessor] Transcript has', youtubeFormat.events.length, 'caption events');
+                        }
                         video.result = youtubeFormat;
                         resolve(youtubeFormat);
                     },
@@ -373,8 +386,10 @@ class BatchProcessor {
 
             // IMPORTANT: Save transcript to persistent storage for later use
             // This allows the transcript to be loaded when visiting the video page
+            console.log('[BatchProcessor] video.result after transcription:', video.result ? 'exists' : 'NULL');
             if (video.result && window.transcriptStorage) {
                 try {
+                    console.log('[BatchProcessor] Saving transcript to storage...');
                     await window.transcriptStorage.saveTranscript(video.videoId, {
                         captionData: video.result,
                         videoTitle: video.title,
@@ -382,11 +397,15 @@ class BatchProcessor {
                         targetLanguage: video.options.targetLanguage || '',
                         provider: video.options.provider || ''
                     });
-                    console.log('[BatchProcessor] Transcript saved to storage for:', video.videoId);
+                    console.log('[BatchProcessor] ✓ Transcript saved to storage for:', video.videoId);
                 } catch (storageError) {
                     console.error('[BatchProcessor] Failed to save transcript to storage:', storageError);
                     // Continue processing even if storage fails
                 }
+            } else if (!video.result) {
+                console.error('[BatchProcessor] ✗ No transcript data to save! video.result is null/undefined');
+            } else if (!window.transcriptStorage) {
+                console.error('[BatchProcessor] ✗ transcriptStorage not available on window!');
             }
 
             // Mark as completed
