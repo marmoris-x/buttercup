@@ -206,10 +206,27 @@ class BatchUI {
         for (const url of urls) {
             const videoId = this.extractVideoId(url);
             if (videoId) {
+                // Fetch video title immediately (popup context has better CORS support)
+                let videoTitle = `Video ${videoId}`;
+                try {
+                    console.log('[BatchUI] Fetching title for:', videoId);
+                    const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+                    const response = await fetch(oembedUrl);
+                    if (response.ok) {
+                        const data = await response.json();
+                        videoTitle = data.title || videoTitle;
+                        console.log('[BatchUI] ✓ Fetched title for', videoId, ':', videoTitle);
+                    } else {
+                        console.warn('[BatchUI] oEmbed failed for', videoId, '- status:', response.status);
+                    }
+                } catch (err) {
+                    console.warn('[BatchUI] Could not fetch title for', videoId, ':', err.message);
+                }
+
                 videos.push({
                     videoId: videoId,
                     url: url,
-                    title: `Video ${videoId}`,
+                    title: videoTitle,
                     status: 'pending',
                     progress: 0,
                     currentStep: '',
