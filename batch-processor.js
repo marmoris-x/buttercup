@@ -560,21 +560,34 @@ class BatchProcessor {
      */
     async fetchVideoInfo(videoId) {
         try {
+            console.log('[BatchProcessor] Fetching video info for:', videoId);
+
             // Try to fetch from YouTube's oEmbed API (no API key needed)
-            const response = await fetch(`https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`);
+            const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+            console.log('[BatchProcessor] oEmbed URL:', oembedUrl);
+
+            const response = await fetch(oembedUrl);
+            console.log('[BatchProcessor] oEmbed response status:', response.status);
 
             if (response.ok) {
                 const data = await response.json();
+                console.log('[BatchProcessor] ✓ Video info fetched:', {
+                    title: data.title,
+                    author: data.author_name
+                });
                 return {
                     title: data.title,
                     author: data.author_name,
                     thumbnail: data.thumbnail_url
                 };
+            } else {
+                console.warn('[BatchProcessor] oEmbed request failed with status:', response.status);
             }
         } catch (error) {
-            console.warn('[BatchProcessor] Could not fetch video info:', error);
+            console.error('[BatchProcessor] Could not fetch video info:', error);
         }
 
+        console.warn('[BatchProcessor] Using fallback title for:', videoId);
         return {
             title: `Video ${videoId}`,
             author: 'Unknown',
