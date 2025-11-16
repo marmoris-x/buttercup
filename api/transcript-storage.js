@@ -10,7 +10,7 @@ class TranscriptStorage {
 
     /**
      * Save transcript for a video
-     * @param {string} videoId - YouTube video ID
+     * @param {string} videoId - Video ID (platform-specific)
      * @param {object} data - Transcript data
      */
     async saveTranscript(videoId, data) {
@@ -23,6 +23,9 @@ class TranscriptStorage {
                 srtData: data.srtData || null,
                 videoTitle: data.videoTitle || 'Unknown',
                 timestamp: Date.now(),
+                // Multi-platform support
+                videoUrl: data.videoUrl || null,  // Original URL for any platform
+                platform: data.platform || 'YouTube',  // Platform name
                 translationSettings: {
                     enabled: data.translationEnabled || false,
                     targetLanguage: data.targetLanguage || '',

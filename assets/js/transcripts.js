@@ -74,6 +74,7 @@ function displayTranscripts() {
                     <div class="flex-1">
                         <h3 class="text-xl font-bold mb-1">${escapeHtml(transcript.videoTitle || 'Unknown Video')}</h3>
                         <div class="flex gap-2 items-center text-sm text-gray-600">
+                            <span class="badge badge-sm badge-primary">${transcript.platform || 'YouTube'}</span>
                             <span class="badge badge-sm badge-outline">${videoId}</span>
                             <span>•</span>
                             <span>${date.toLocaleDateString()} ${date.toLocaleTimeString()}</span>
@@ -81,7 +82,7 @@ function displayTranscripts() {
                         </div>
                     </div>
                     <div class="flex gap-2">
-                        <button class="btn btn-sm btn-outline" data-action="openOnYouTube" data-video-id="${videoId}" title="Open on YouTube">
+                        <button class="btn btn-sm btn-outline" data-action="openVideo" data-video-id="${videoId}" title="Open Video">
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                             </svg>
@@ -125,12 +126,12 @@ function createSummaryHTML(summary, videoId) {
 
     return `
         <div class="mt-3">
-            <button class="btn btn-sm btn-primary mb-2" data-action="viewSummaryOnYouTube" data-video-id="${videoId}">
+            <button class="btn btn-sm btn-primary mb-2" data-action="viewSummary" data-video-id="${videoId}">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
-                View AI Summary on YouTube
+                View AI Summary
             </button>
             <button class="btn btn-sm btn-outline mb-2 ml-2" data-action="copyAsMarkdown" data-video-id="${videoId}" title="Copy as Markdown">
                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -225,8 +226,8 @@ function setupEventDelegation() {
 
         // Handle different actions
         switch (action) {
-            case 'openOnYouTube':
-                openOnYouTube(videoId);
+            case 'openVideo':
+                openVideo(videoId);
                 break;
             case 'downloadSRT':
                 downloadSRT(videoId);
@@ -234,8 +235,8 @@ function setupEventDelegation() {
             case 'deleteTranscript':
                 deleteTranscript(videoId);
                 break;
-            case 'viewSummaryOnYouTube':
-                viewSummaryOnYouTube(videoId);
+            case 'viewSummary':
+                viewSummary(videoId);
                 break;
             case 'copyAsMarkdown':
                 copyAsMarkdown(videoId);
@@ -263,22 +264,35 @@ function toggleDetails(button) {
 }
 
 // Action functions (called by event delegation)
-function openOnYouTube(videoId) {
-    console.log('[Transcripts] openOnYouTube called for', videoId);
-    window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank');
+function openVideo(videoId) {
+    console.log('[Transcripts] openVideo called for', videoId);
+    const transcript = allTranscripts[videoId];
+
+    // Use stored videoUrl if available, fallback to YouTube for legacy transcripts
+    if (transcript && transcript.videoUrl) {
+        window.open(transcript.videoUrl, '_blank');
+    } else {
+        // Legacy fallback for old YouTube-only transcripts
+        window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank');
+    }
 }
 
-function viewSummaryOnYouTube(videoId) {
-    console.log('[Transcripts] viewSummaryOnYouTube called for', videoId);
+function viewSummary(videoId) {
+    console.log('[Transcripts] viewSummary called for', videoId);
     const transcript = allTranscripts[videoId];
     if (!transcript || !transcript.summary) {
         alert('No summary available for this video');
         return;
     }
 
-    // Simply open the YouTube video - buttercup.js will auto-load the summary
+    // Open the original video URL - buttercup.js will auto-load the summary
     // because it's stored in chrome.storage.local
-    window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank');
+    if (transcript.videoUrl) {
+        window.open(transcript.videoUrl, '_blank');
+    } else {
+        // Legacy fallback for old YouTube-only transcripts
+        window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank');
+    }
 }
 
 function downloadSRT(videoId) {

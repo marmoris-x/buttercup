@@ -1100,10 +1100,19 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
                             progressIndicator.setStepInProgress(currentStepIndex, 'Saving transcript to storage...');
                         }
 
+                        // Detect platform for storage
+                        const currentHostname = window.location.hostname;
+                        const platformName = currentHostname.includes('youtube') || currentHostname.includes('youtu.be')
+                            ? 'YouTube'
+                            : currentHostname.replace(/^www\./, '').split('.')[0].charAt(0).toUpperCase() +
+                              currentHostname.replace(/^www\./, '').split('.')[0].slice(1);
+
                         await transcriptStorage.saveTranscript(currentVideoId, {
                             captionData: finalCaptionData,
                             srtData: transcriptStorage.generateSRT(finalCaptionData),
                             videoTitle: videoTitle,
+                            videoUrl: window.location.href,  // Save original URL for any platform
+                            platform: platformName,
                             translationSettings: {
                                 enabled: llmTranslationEnabled,
                                 targetLanguage: llmTargetLanguage,

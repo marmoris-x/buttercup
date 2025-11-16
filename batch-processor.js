@@ -483,6 +483,8 @@ class BatchProcessor {
                         captionData: video.result,
                         srtData: srtData,  // Include generated SRT data
                         videoTitle: video.title,
+                        videoUrl: video.url,  // Original URL for any platform
+                        platform: video.platform || 'Video',  // Platform name
                         translationEnabled: translateOption,
                         targetLanguage: video.options.targetLanguage || '',
                         provider: video.options.provider || ''
