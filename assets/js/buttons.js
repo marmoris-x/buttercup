@@ -761,81 +761,32 @@ startTranscription.addEventListener('click', async () => {
 
 let currentTranscriptData = null;
 
-// Helper function to check if URL is a valid video page (YouTube, Vimeo, Dailymotion, etc.)
+// Helper function to check if URL is a valid video page
+// UNIVERSAL approach: Accept ANY http/https URL
+// yt-dlp supports 1000+ sites - let it decide if it can handle the URL
 function isVideoPageUrl(url) {
     if (!url) return false;
 
-    // YouTube
-    if (url.includes('youtube.com/watch') || url.includes('youtube.com/shorts') || url.includes('youtu.be/')) {
-        return true;
+    // Only exclude obvious non-video URLs
+    const excludedPatterns = [
+        'chrome://',
+        'chrome-extension://',
+        'about:',
+        'file://',
+        'data:',
+        'javascript:',
+        'mailto:'
+    ];
+
+    for (const pattern of excludedPatterns) {
+        if (url.startsWith(pattern)) {
+            return false;
+        }
     }
 
-    // Vimeo
-    if (url.includes('vimeo.com/') && /vimeo\.com\/\d+/.test(url)) {
-        return true;
-    }
-
-    // Dailymotion
-    if (url.includes('dailymotion.com/video/') || url.includes('dai.ly/')) {
-        return true;
-    }
-
-    // Twitter/X
-    if ((url.includes('twitter.com/') || url.includes('x.com/')) && url.includes('/status/')) {
-        return true;
-    }
-
-    // TikTok
-    if (url.includes('tiktok.com/') && url.includes('/video/')) {
-        return true;
-    }
-
-    // Instagram
-    if (url.includes('instagram.com/') && (url.includes('/p/') || url.includes('/reel/') || url.includes('/tv/'))) {
-        return true;
-    }
-
-    // Facebook
-    if ((url.includes('facebook.com/') || url.includes('fb.watch')) && (url.includes('/videos/') || url.includes('/watch') || url.includes('/reel'))) {
-        return true;
-    }
-
-    // Twitch
-    if (url.includes('twitch.tv/videos/') || url.includes('twitch.tv/clip/') || (url.includes('twitch.tv/') && url.includes('/clip/'))) {
-        return true;
-    }
-
-    // Reddit
-    if (url.includes('reddit.com/') && (url.includes('/comments/') || url.includes('v.redd.it'))) {
-        return true;
-    }
-
-    // SoundCloud
-    if (url.includes('soundcloud.com/')) {
-        return true;
-    }
-
-    // Bilibili
-    if (url.includes('bilibili.com/video/')) {
-        return true;
-    }
-
-    // Rumble
-    if (url.includes('rumble.com/')) {
-        return true;
-    }
-
-    // Odysee/LBRY
-    if (url.includes('odysee.com/') || url.includes('lbry.tv/')) {
-        return true;
-    }
-
-    // PeerTube instances (common pattern)
-    if (url.includes('/videos/watch/')) {
-        return true;
-    }
-
-    return false;
+    // Accept any http/https URL as potentially having video content
+    // yt-dlp will determine if it can actually extract video from it
+    return url.startsWith('http://') || url.startsWith('https://');
 }
 
 // Legacy alias for backward compatibility
@@ -940,23 +891,62 @@ function getVideoIdFromTab(tab) {
     return Math.abs(hash).toString(36);
 }
 
-// Get platform name from URL
+// Get platform name from URL - universal approach
 function getPlatformName(url) {
     if (!url) return 'Unknown';
-    if (url.includes('youtube.com') || url.includes('youtu.be')) return 'YouTube';
-    if (url.includes('vimeo.com')) return 'Vimeo';
-    if (url.includes('dailymotion.com') || url.includes('dai.ly')) return 'Dailymotion';
-    if (url.includes('twitter.com') || url.includes('x.com')) return 'Twitter/X';
-    if (url.includes('tiktok.com')) return 'TikTok';
-    if (url.includes('instagram.com')) return 'Instagram';
-    if (url.includes('facebook.com') || url.includes('fb.watch')) return 'Facebook';
-    if (url.includes('twitch.tv')) return 'Twitch';
-    if (url.includes('reddit.com') || url.includes('redd.it')) return 'Reddit';
-    if (url.includes('soundcloud.com')) return 'SoundCloud';
-    if (url.includes('bilibili.com')) return 'Bilibili';
-    if (url.includes('rumble.com')) return 'Rumble';
-    if (url.includes('odysee.com') || url.includes('lbry.tv')) return 'Odysee';
-    return 'Video';
+
+    try {
+        const urlObj = new URL(url);
+        const hostname = urlObj.hostname;
+
+        // Map common hostnames to friendly names
+        const knownPlatforms = {
+            'youtube.com': 'YouTube',
+            'www.youtube.com': 'YouTube',
+            'youtu.be': 'YouTube',
+            'vimeo.com': 'Vimeo',
+            'www.vimeo.com': 'Vimeo',
+            'dailymotion.com': 'Dailymotion',
+            'www.dailymotion.com': 'Dailymotion',
+            'dai.ly': 'Dailymotion',
+            'twitter.com': 'Twitter',
+            'x.com': 'X',
+            'tiktok.com': 'TikTok',
+            'www.tiktok.com': 'TikTok',
+            'instagram.com': 'Instagram',
+            'www.instagram.com': 'Instagram',
+            'facebook.com': 'Facebook',
+            'www.facebook.com': 'Facebook',
+            'fb.watch': 'Facebook',
+            'twitch.tv': 'Twitch',
+            'www.twitch.tv': 'Twitch',
+            'reddit.com': 'Reddit',
+            'www.reddit.com': 'Reddit',
+            'soundcloud.com': 'SoundCloud',
+            'bilibili.com': 'Bilibili',
+            'www.bilibili.com': 'Bilibili',
+            'rumble.com': 'Rumble',
+            'odysee.com': 'Odysee'
+        };
+
+        // Check known platforms first
+        if (knownPlatforms[hostname]) {
+            return knownPlatforms[hostname];
+        }
+
+        // For unknown platforms, extract clean hostname
+        // Remove www. and return capitalized domain
+        let cleanHost = hostname.replace(/^www\./, '');
+        // Get just the domain name (without TLD for common ones)
+        const parts = cleanHost.split('.');
+        if (parts.length >= 2) {
+            // Capitalize first letter of domain
+            return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+        }
+        return cleanHost;
+    } catch (e) {
+        return 'Video';
+    }
 }
 
 // Refresh transcript info for current video

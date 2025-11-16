@@ -118,76 +118,30 @@ class BatchUI {
         return this.findVideoTab();
     }
 
-    // Check if URL is a video page (supports multiple platforms)
+    // Check if URL is a video page - UNIVERSAL approach
+    // Accept ANY http/https URL - yt-dlp supports 1000+ sites
     isVideoPageUrl(url) {
         if (!url) return false;
 
-        // YouTube
-        if (url.includes('youtube.com/watch') || url.includes('youtube.com/shorts') || url.includes('youtu.be/')) {
-            return true;
+        // Only exclude obvious non-video URLs
+        const excludedPatterns = [
+            'chrome://',
+            'chrome-extension://',
+            'about:',
+            'file://',
+            'data:',
+            'javascript:',
+            'mailto:'
+        ];
+
+        for (const pattern of excludedPatterns) {
+            if (url.startsWith(pattern)) {
+                return false;
+            }
         }
 
-        // Vimeo
-        if (url.includes('vimeo.com/') && /vimeo\.com\/\d+/.test(url)) {
-            return true;
-        }
-
-        // Dailymotion
-        if (url.includes('dailymotion.com/video/') || url.includes('dai.ly/')) {
-            return true;
-        }
-
-        // Twitter/X
-        if ((url.includes('twitter.com/') || url.includes('x.com/')) && url.includes('/status/')) {
-            return true;
-        }
-
-        // TikTok
-        if (url.includes('tiktok.com/') && url.includes('/video/')) {
-            return true;
-        }
-
-        // Instagram
-        if (url.includes('instagram.com/') && (url.includes('/p/') || url.includes('/reel/'))) {
-            return true;
-        }
-
-        // Facebook
-        if ((url.includes('facebook.com/') || url.includes('fb.watch')) && (url.includes('/videos/') || url.includes('/watch') || url.includes('/reel'))) {
-            return true;
-        }
-
-        // Twitch
-        if (url.includes('twitch.tv/videos/') || url.includes('twitch.tv/clip/')) {
-            return true;
-        }
-
-        // Reddit
-        if (url.includes('reddit.com/') && url.includes('/comments/')) {
-            return true;
-        }
-
-        // SoundCloud
-        if (url.includes('soundcloud.com/')) {
-            return true;
-        }
-
-        // Bilibili
-        if (url.includes('bilibili.com/video/')) {
-            return true;
-        }
-
-        // Rumble
-        if (url.includes('rumble.com/')) {
-            return true;
-        }
-
-        // Odysee
-        if (url.includes('odysee.com/') || url.includes('lbry.tv/')) {
-            return true;
-        }
-
-        return false;
+        // Accept any http/https URL
+        return url.startsWith('http://') || url.startsWith('https://');
     }
 
     attachEventListeners() {
@@ -406,16 +360,37 @@ class BatchUI {
     }
 
     // Get platform name from URL
+    // Get platform name from URL - UNIVERSAL approach
     getPlatformFromUrl(url) {
-        if (url.includes('youtube.com') || url.includes('youtu.be')) return 'YouTube';
-        if (url.includes('vimeo.com')) return 'Vimeo';
-        if (url.includes('dailymotion.com') || url.includes('dai.ly')) return 'Dailymotion';
-        if (url.includes('twitter.com') || url.includes('x.com')) return 'Twitter';
-        if (url.includes('tiktok.com')) return 'TikTok';
-        if (url.includes('instagram.com')) return 'Instagram';
-        if (url.includes('facebook.com') || url.includes('fb.watch')) return 'Facebook';
-        if (url.includes('twitch.tv')) return 'Twitch';
-        return 'Video';
+        if (!url) return 'Video';
+
+        try {
+            const urlObj = new URL(url);
+            const hostname = urlObj.hostname;
+
+            // Map common hostnames to friendly names
+            const knownPlatforms = {
+                'youtube.com': 'YouTube', 'www.youtube.com': 'YouTube', 'youtu.be': 'YouTube',
+                'vimeo.com': 'Vimeo', 'www.vimeo.com': 'Vimeo',
+                'dailymotion.com': 'Dailymotion', 'www.dailymotion.com': 'Dailymotion', 'dai.ly': 'Dailymotion',
+                'twitter.com': 'Twitter', 'x.com': 'X',
+                'tiktok.com': 'TikTok', 'www.tiktok.com': 'TikTok',
+                'instagram.com': 'Instagram', 'www.instagram.com': 'Instagram',
+                'facebook.com': 'Facebook', 'www.facebook.com': 'Facebook', 'fb.watch': 'Facebook',
+                'twitch.tv': 'Twitch', 'www.twitch.tv': 'Twitch'
+            };
+
+            if (knownPlatforms[hostname]) {
+                return knownPlatforms[hostname];
+            }
+
+            // For unknown platforms, capitalize hostname
+            let cleanHost = hostname.replace(/^www\./, '');
+            const parts = cleanHost.split('.');
+            return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+        } catch (e) {
+            return 'Video';
+        }
     }
 
     // Fetch video title - supports multiple platforms
