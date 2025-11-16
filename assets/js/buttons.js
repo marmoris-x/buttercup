@@ -955,8 +955,9 @@ async function refreshTranscriptInfo() {
         // Get current tab
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
-        if (!tab || !tab.url || !isYouTubeVideoUrl(tab.url)) {
+        if (!tab || !tab.url || !isVideoPageUrl(tab.url)) {
             currentVideoIdEl.textContent = 'Not on a video page';
+            currentVideoIdEl.dataset.videoId = ''; // Store actual videoId
             transcriptStatusBadge.textContent = 'N/A';
             transcriptStatusBadge.className = 'badge badge-sm badge-warning';
             transcriptDate.textContent = '';
@@ -969,6 +970,7 @@ async function refreshTranscriptInfo() {
         const videoId = getVideoIdFromTab(tab);
         if (!videoId) {
             currentVideoIdEl.textContent = 'Invalid video URL';
+            currentVideoIdEl.dataset.videoId = ''; // Store actual videoId
             disableTranscriptButtons();
             currentTranscriptData = null;
             loadStorageStats();
@@ -978,6 +980,7 @@ async function refreshTranscriptInfo() {
         // Show platform and video ID
         const platform = getPlatformName(tab.url);
         currentVideoIdEl.textContent = `${platform}: ${videoId}`;
+        currentVideoIdEl.dataset.videoId = videoId; // Store actual videoId for later use
 
         // Load transcript from storage
         chrome.storage.local.get(['buttercup_transcripts'], (result) => {
@@ -1122,7 +1125,7 @@ viewEditTranscript.addEventListener('click', () => {
             // Update storage with both formats
             chrome.storage.local.get(['buttercup_transcripts'], (result) => {
                 const transcripts = result.buttercup_transcripts || {};
-                const videoId = currentVideoIdEl.textContent;
+                const videoId = currentVideoIdEl.dataset.videoId || currentVideoIdEl.textContent;
 
                 if (transcripts[videoId]) {
                     // Update both srtData and captionData (buttercup.js expects captionData, not youtubeFormat)
@@ -1173,7 +1176,7 @@ deleteTranscript.addEventListener('click', () => {
         return;
     }
 
-    const videoId = currentVideoIdEl.textContent;
+    const videoId = currentVideoIdEl.dataset.videoId || currentVideoIdEl.textContent;
 
     chrome.storage.local.get(['buttercup_transcripts'], (result) => {
         const transcripts = result.buttercup_transcripts || {};
