@@ -663,4 +663,37 @@ if (typeof window !== 'undefined') {
     window.BatchProcessor = BatchProcessor;
     window.batchProcessor = new BatchProcessor();
     console.log('[Buttercup] Batch processor initialized');
+
+    // Listen for commands from content script (which receives them from popup)
+    document.addEventListener('buttercupBatchCommand', async (e) => {
+        if (!e.detail || !e.detail.command) return;
+
+        const command = e.detail.command;
+        console.log('[BatchProcessor] Received command:', command);
+
+        try {
+            switch (command) {
+                case 'start':
+                    await window.batchProcessor.start();
+                    break;
+                case 'pause':
+                    await window.batchProcessor.pause();
+                    break;
+                case 'resume':
+                    await window.batchProcessor.resume();
+                    break;
+                case 'stop':
+                    await window.batchProcessor.stop();
+                    break;
+                case 'reload':
+                    await window.batchProcessor.loadState();
+                    break;
+                default:
+                    console.warn('[BatchProcessor] Unknown command:', command);
+            }
+        } catch (error) {
+            console.error('[BatchProcessor] Error executing command:', command, error);
+        }
+    });
 }
+

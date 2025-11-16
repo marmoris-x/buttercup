@@ -328,34 +328,16 @@ class BatchUI {
         await chrome.storage.local.set({ buttercup_batch_processor: batchState });
 
         try {
-            const result = await chrome.scripting.executeScript({
-                target: { tabId: youtubeTab.id },
-                world: 'MAIN',
-                func: async () => {
-                    if (!window.batchProcessor) {
-                        return { success: false, error: 'Batch processor not loaded. Please reload the YouTube video page.' };
-                    }
-                    try {
-                        await window.batchProcessor.start();
-                        return { success: true };
-                    } catch (error) {
-                        return { success: false, error: error.message };
-                    }
-                }
+            // Use message passing instead of executeScript to avoid permission issues
+            await chrome.tabs.sendMessage(youtubeTab.id, {
+                type: 'BATCH_COMMAND',
+                command: 'start'
             });
 
-            if (result && result[0]?.result?.success) {
-                this.showAlert('Batch processing started', 'success');
-            } else {
-                const error = result && result[0]?.result?.error ? result[0].result.error : 'Unknown error';
-                this.showAlert(error, 'error');
-                // Reset running state
-                batchState.isRunning = false;
-                await chrome.storage.local.set({ buttercup_batch_processor: batchState });
-            }
+            this.showAlert('Batch processing started', 'success');
         } catch (error) {
             console.error('[BatchUI] Failed to start batch processing:', error);
-            this.showAlert(`Failed to start: ${error.message}`, 'error');
+            this.showAlert(`Failed to start: ${error.message}. Make sure the YouTube page is fully loaded.`, 'error');
             // Reset running state
             batchState.isRunning = false;
             await chrome.storage.local.set({ buttercup_batch_processor: batchState });
@@ -373,20 +355,16 @@ class BatchUI {
 
         const action = this.isPaused ? 'resume' : 'pause';
 
-        await chrome.scripting.executeScript({
-            target: { tabId: youtubeTab.id },
-            world: 'MAIN',
-            func: async (action) => {
-                if (window.batchProcessor) {
-                    if (action === 'pause') {
-                        await window.batchProcessor.pause();
-                    } else {
-                        await window.batchProcessor.resume();
-                    }
-                }
-            },
-            args: [action]
-        });
+        try {
+            // Use message passing instead of executeScript
+            await chrome.tabs.sendMessage(youtubeTab.id, {
+                type: 'BATCH_COMMAND',
+                command: action
+            });
+        } catch (error) {
+            console.error('[BatchUI] Failed to toggle pause:', error);
+            this.showAlert(`Failed to ${action}: ${error.message}`, 'error');
+        }
 
         await this.loadBatchState();
     }
@@ -420,15 +398,10 @@ class BatchUI {
         const tabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
         for (const tab of tabs) {
             try {
-                await chrome.scripting.executeScript({
-                    target: { tabId: tab.id },
-                    world: 'MAIN',
-                    func: async () => {
-                        if (window.batchProcessor) {
-                            // Reload state from storage
-                            await window.batchProcessor.loadState();
-                        }
-                    }
+                // Use message passing instead of executeScript
+                await chrome.tabs.sendMessage(tab.id, {
+                    type: 'BATCH_COMMAND',
+                    command: 'reload'
                 });
             } catch (err) {
                 console.log('[BatchUI] Could not notify tab:', err);

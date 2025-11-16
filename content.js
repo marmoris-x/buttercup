@@ -363,3 +363,22 @@ document.addEventListener('buttercupStorageRequest', function (e) {
 });
 
 document.dispatchEvent(new CustomEvent('buttercupSettingsChanged'));
+
+// Listen for batch processor commands from popup via chrome.runtime.onMessage
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.type === 'BATCH_COMMAND') {
+        const { command } = message;
+
+        // Dispatch event to MAIN world where batchProcessor lives
+        document.dispatchEvent(new CustomEvent('buttercupBatchCommand', {
+            detail: { command: command }
+        }));
+
+        // Wait a bit for the command to be processed, then send response
+        setTimeout(() => {
+            sendResponse({ success: true });
+        }, 100);
+
+        return true; // Keep message channel open for async response
+    }
+});
