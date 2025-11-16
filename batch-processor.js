@@ -139,14 +139,27 @@ class BatchProcessor {
      */
     async start() {
         await this.waitForInit();
+
+        // IMPORTANT: Reload state from storage before starting
+        // This ensures we have the latest queue from the popup
+        await this.loadState();
+        console.log('[BatchProcessor] After reloading state, queue length:', this.queue.length);
+
         if (this.isRunning && !this.isPaused) {
             console.warn('[BatchProcessor] Batch processing already running');
+            return;
+        }
+
+        if (this.queue.length === 0) {
+            console.warn('[BatchProcessor] No videos in queue to process');
             return;
         }
 
         this.isRunning = true;
         this.isPaused = false;
         this.stats.startTime = this.stats.startTime || Date.now();
+
+        console.log('[BatchProcessor] Starting batch processing with', this.queue.length, 'videos');
 
         if (window.buttercupLogger) {
             window.buttercupLogger.info('BATCH', `Starting batch processing (${this.queue.length} videos queued)`);
@@ -211,8 +224,12 @@ class BatchProcessor {
      * Process the queue
      */
     async processQueue() {
+        console.log('[BatchProcessor] processQueue called, isRunning:', this.isRunning, 'isPaused:', this.isPaused);
+        console.log('[BatchProcessor] Queue length:', this.queue.length, 'Currently processing:', this.currentlyProcessing.length);
+
         // Check if we should continue processing
         if (!this.isRunning || this.isPaused) {
+            console.log('[BatchProcessor] Not processing - isRunning:', this.isRunning, 'isPaused:', this.isPaused);
             return;
         }
 
@@ -220,6 +237,7 @@ class BatchProcessor {
         while (this.currentlyProcessing.length < this.maxConcurrent && this.queue.length > 0) {
             const video = this.queue.shift();
             this.currentlyProcessing.push(video);
+            console.log('[BatchProcessor] Starting to process video:', video.videoId);
 
             // Process video asynchronously
             this.processVideo(video);
@@ -227,6 +245,7 @@ class BatchProcessor {
 
         // Check if all done
         if (this.currentlyProcessing.length === 0 && this.queue.length === 0) {
+            console.log('[BatchProcessor] All videos processed, stopping');
             await this.stop();
             this.notifyComplete();
         }
