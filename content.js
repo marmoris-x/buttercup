@@ -3,6 +3,11 @@ const loggerScript = document.createElement('script');
 loggerScript.src = chrome.runtime.getURL('logger.js');
 document.documentElement.prepend(loggerScript);
 
+// Inject video detector - universal video detection for all sites
+const videoDetectorScript = document.createElement('script');
+videoDetectorScript.src = chrome.runtime.getURL('video-detector.js');
+document.documentElement.prepend(videoDetectorScript);
+
 // Inject rate limiter - must be available before API scripts
 const rateLimiterScript = document.createElement('script');
 rateLimiterScript.src = chrome.runtime.getURL('rate-limiter.js');

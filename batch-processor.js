@@ -352,9 +352,12 @@ class BatchProcessor {
             const useWhisperTranslation = false; // Always use transcription mode
             const translateOption = video.options.translate || false; // This is for LLM translation
 
+            // Pass full URL if available (for non-YouTube platforms), otherwise video ID
+            const videoUrlOrId = video.url || video.videoId;
+
             await new Promise((resolve, reject) => {
                 window.transcriptionHandler.processVideo(
-                    video.videoId,
+                    videoUrlOrId, // Pass URL for multi-platform support
                     useWhisperTranslation, // Use transcription, not Whisper translation
                     // onProgress callback - transcription.js only passes status string as first param
                     (statusText) => {

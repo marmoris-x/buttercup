@@ -1,21 +1,18 @@
 {
     "manifest_version": 3,
     "name": "Buttercup",
-    "version": "0.1.2",
-    "description": "Replace YouTube auto captions with OpenAI Whisper-generated ones",
+    "version": "0.2.0",
+    "description": "AI-powered video transcription and translation for YouTube, Vimeo, Dailymotion, Twitter, TikTok, and 1000+ video sites using OpenAI Whisper",
     "permissions": ["activeTab", "tabs", "storage", "scripting", "clipboardRead"],
     "host_permissions": [
         "<all_urls>",
-        "*://*.youtube.com/*",
-        "*://youtube.com/*",
-        "*://youtu.be/*",
         "https://buttercup.igerman.cc/*",
         "https://api.groq.com/*",
         "http://127.0.0.1:8675/*"
     ],
     "content_scripts": [
         {
-            "matches": ["*://youtube.com/*", "*://*.youtube.com/*", "*://youtu.be/*"],
+            "matches": ["<all_urls>"],
             "js": ["content.js"],
             "run_at": "document_start"
         }
@@ -24,6 +21,7 @@
         {
             "resources": [
                 "buttercup.js",
+                "video-detector.js",
                 "caption-overlay.js",
                 "summary-sidebar.js",
                 "progress-indicator.js",

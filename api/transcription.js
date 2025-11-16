@@ -51,13 +51,13 @@ class TranscriptionHandler {
 
     /**
      * Process a video for transcription
-     * @param {string} videoId - The YouTube video ID
+     * @param {string} videoIdOrUrl - Video ID or full URL (supports YouTube, Vimeo, etc.)
      * @param {boolean} translate - Whether to translate the subtitles
      * @param {function} onProgress - Callback for progress updates
      * @param {function} onSuccess - Callback for successful transcription
      * @param {function} onError - Callback for errors
      */
-    async processVideo(videoId, translate, onProgress, onSuccess, onError) {
+    async processVideo(videoIdOrUrl, translate, onProgress, onSuccess, onError) {
         if (this.isProcessing) {
             onError(new Error('Already processing a video'));
             return;
@@ -68,6 +68,10 @@ class TranscriptionHandler {
             onError(new Error(errorMsg));
             return;
         }
+
+        // Determine if input is URL or video ID
+        const isUrl = videoIdOrUrl.startsWith('http');
+        const videoId = isUrl ? this.extractVideoIdFromUrl(videoIdOrUrl) : videoIdOrUrl;
 
         if (this.isDuplicateRequest(videoId, translate)) {
             onError(new Error('This video has already been processed with the same settings.'));
@@ -88,7 +92,8 @@ class TranscriptionHandler {
             onProgress('Downloading audio...');
 
             // Step 2: Download audio using the local yt-dlp server
-            const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
+            // If full URL is provided, use it directly; otherwise construct YouTube URL
+            const videoUrl = isUrl ? videoIdOrUrl : `https://www.youtube.com/watch?v=${videoIdOrUrl}`;
             console.info('[Buttercup] Downloading audio from:', videoUrl);
             const audioResult = await this.cobaltAPI.downloadAudio(videoUrl);
 
@@ -199,6 +204,41 @@ class TranscriptionHandler {
         }
 
         return name + '.srt';
+    }
+
+    /**
+     * Extract video ID from URL (supports multiple platforms)
+     * @param {string} url - Video URL
+     * @returns {string} - Video ID or hash of URL
+     */
+    extractVideoIdFromUrl(url) {
+        // YouTube
+        const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]+)/);
+        if (youtubeMatch) return youtubeMatch[1];
+
+        // Vimeo
+        const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+        if (vimeoMatch) return vimeoMatch[1];
+
+        // Dailymotion
+        const dailymotionMatch = url.match(/(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)/);
+        if (dailymotionMatch) return dailymotionMatch[1];
+
+        // Twitter/X
+        const twitterMatch = url.match(/(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/);
+        if (twitterMatch) return twitterMatch[1];
+
+        // TikTok
+        const tiktokMatch = url.match(/tiktok\.com\/@[\w.-]+\/video\/(\d+)/);
+        if (tiktokMatch) return tiktokMatch[1];
+
+        // Fallback: generate hash from URL
+        let hash = 0;
+        for (let i = 0; i < url.length; i++) {
+            hash = ((hash << 5) - hash) + url.charCodeAt(i);
+            hash = hash & hash;
+        }
+        return Math.abs(hash).toString(36);
     }
 
     /**

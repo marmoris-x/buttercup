@@ -50,7 +50,7 @@ class BatchUI {
                         <span class="label-text font-semibold">Add Videos to Batch</span>
                     </label>
                     <textarea id="batch-urls" class="textarea textarea-bordered h-20 text-xs"
-                              placeholder="Paste YouTube URLs (one per line)&#10;https://www.youtube.com/watch?v=...&#10;https://youtu.be/...&#10;or just video IDs"></textarea>
+                              placeholder="Paste video URLs (one per line)&#10;YouTube, Vimeo, Dailymotion, Twitter, TikTok...&#10;https://www.youtube.com/watch?v=...&#10;https://vimeo.com/123456789"></textarea>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2">
@@ -93,31 +93,66 @@ class BatchUI {
         `;
     }
 
-    async findYouTubeTab() {
-        // First, check if active tab is a YouTube video tab
+    async findVideoTab() {
+        // First, check if active tab is a video page
         const activeTabs = await chrome.tabs.query({ active: true, currentWindow: true });
         if (activeTabs[0] && activeTabs[0].url) {
-            const url = activeTabs[0].url;
-            // Check if it's a video page (watch, shorts, or embed)
-            if (url.includes('youtube.com/watch') || url.includes('youtube.com/shorts') || url.includes('youtube.com/embed')) {
+            if (this.isVideoPageUrl(activeTabs[0].url)) {
                 return activeTabs[0];
             }
         }
 
-        // Otherwise, find any YouTube video tab
-        const youtubeTabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
-        for (const tab of youtubeTabs) {
-            if (tab.url && (tab.url.includes('/watch') || tab.url.includes('/shorts') || tab.url.includes('/embed'))) {
+        // Otherwise, find any video tab from supported platforms
+        const allTabs = await chrome.tabs.query({});
+        for (const tab of allTabs) {
+            if (tab.url && this.isVideoPageUrl(tab.url)) {
                 return tab;
             }
         }
 
-        // No video tab found, return any YouTube tab
-        if (youtubeTabs.length > 0) {
-            return youtubeTabs[0];
+        return null;
+    }
+
+    // Legacy alias for backward compatibility
+    async findYouTubeTab() {
+        return this.findVideoTab();
+    }
+
+    // Check if URL is a video page (supports multiple platforms)
+    isVideoPageUrl(url) {
+        if (!url) return false;
+
+        // YouTube
+        if (url.includes('youtube.com/watch') || url.includes('youtube.com/shorts') || url.includes('youtu.be/')) {
+            return true;
         }
 
-        return null;
+        // Vimeo
+        if (url.includes('vimeo.com/') && /vimeo\.com\/\d+/.test(url)) {
+            return true;
+        }
+
+        // Dailymotion
+        if (url.includes('dailymotion.com/video/') || url.includes('dai.ly/')) {
+            return true;
+        }
+
+        // Twitter/X
+        if ((url.includes('twitter.com/') || url.includes('x.com/')) && url.includes('/status/')) {
+            return true;
+        }
+
+        // TikTok
+        if (url.includes('tiktok.com/') && url.includes('/video/')) {
+            return true;
+        }
+
+        // Instagram
+        if (url.includes('instagram.com/') && (url.includes('/p/') || url.includes('/reel/'))) {
+            return true;
+        }
+
+        return false;
     }
 
     attachEventListeners() {
@@ -207,26 +242,17 @@ class BatchUI {
             const videoId = this.extractVideoId(url);
             if (videoId) {
                 // Fetch video title immediately (popup context has better CORS support)
-                let videoTitle = `Video ${videoId}`;
-                try {
-                    console.log('[BatchUI] Fetching title for:', videoId);
-                    const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
-                    const response = await fetch(oembedUrl);
-                    if (response.ok) {
-                        const data = await response.json();
-                        videoTitle = data.title || videoTitle;
-                        console.log('[BatchUI] ✓ Fetched title for', videoId, ':', videoTitle);
-                    } else {
-                        console.warn('[BatchUI] oEmbed failed for', videoId, '- status:', response.status);
-                    }
-                } catch (err) {
-                    console.warn('[BatchUI] Could not fetch title for', videoId, ':', err.message);
-                }
+                const platform = this.getPlatformFromUrl(url);
+                console.log(`[BatchUI] Fetching title for ${platform} video:`, videoId);
+
+                const videoTitle = await this.fetchVideoTitle(url, videoId);
+                console.log('[BatchUI] ✓ Fetched title:', videoTitle);
 
                 videos.push({
                     videoId: videoId,
                     url: url,
                     title: videoTitle,
+                    platform: platform,
                     status: 'pending',
                     progress: 0,
                     currentStep: '',
@@ -302,21 +328,93 @@ class BatchUI {
         }
     }
 
-    // Extract video ID from URL (copied from batch-processor.js)
+    // Extract video ID from URL - supports multiple platforms
     extractVideoId(url) {
-        const patterns = [
-            /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]+)/,
-            /^([a-zA-Z0-9_-]{10,13})$/ // Direct video ID
-        ];
+        // YouTube patterns
+        const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]+)/);
+        if (youtubeMatch) return youtubeMatch[1];
 
-        for (const pattern of patterns) {
-            const match = url.match(pattern);
-            if (match && match[1]) {
-                return match[1];
+        // Direct YouTube video ID
+        if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
+
+        // Vimeo
+        const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
+        if (vimeoMatch) return vimeoMatch[1];
+
+        // Dailymotion
+        const dailymotionMatch = url.match(/(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)/);
+        if (dailymotionMatch) return dailymotionMatch[1];
+
+        // Twitter/X
+        const twitterMatch = url.match(/(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/);
+        if (twitterMatch) return twitterMatch[1];
+
+        // TikTok
+        const tiktokMatch = url.match(/tiktok\.com\/@[\w.-]+\/video\/(\d+)/);
+        if (tiktokMatch) return tiktokMatch[1];
+
+        // Instagram
+        const instagramMatch = url.match(/instagram\.com\/(?:p|reel|tv)\/([a-zA-Z0-9_-]+)/);
+        if (instagramMatch) return instagramMatch[1];
+
+        // Fallback: generate hash from URL for any other site
+        if (url.startsWith('http')) {
+            let hash = 0;
+            for (let i = 0; i < url.length; i++) {
+                hash = ((hash << 5) - hash) + url.charCodeAt(i);
+                hash = hash & hash;
             }
+            return Math.abs(hash).toString(36);
         }
 
         return null;
+    }
+
+    // Get platform name from URL
+    getPlatformFromUrl(url) {
+        if (url.includes('youtube.com') || url.includes('youtu.be')) return 'YouTube';
+        if (url.includes('vimeo.com')) return 'Vimeo';
+        if (url.includes('dailymotion.com') || url.includes('dai.ly')) return 'Dailymotion';
+        if (url.includes('twitter.com') || url.includes('x.com')) return 'Twitter';
+        if (url.includes('tiktok.com')) return 'TikTok';
+        if (url.includes('instagram.com')) return 'Instagram';
+        if (url.includes('facebook.com') || url.includes('fb.watch')) return 'Facebook';
+        if (url.includes('twitch.tv')) return 'Twitch';
+        return 'Video';
+    }
+
+    // Fetch video title - supports multiple platforms
+    async fetchVideoTitle(url, videoId) {
+        const platform = this.getPlatformFromUrl(url);
+
+        try {
+            // YouTube oEmbed
+            if (platform === 'YouTube') {
+                const oembedUrl = `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`;
+                const response = await fetch(oembedUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.title;
+                }
+            }
+
+            // Vimeo oEmbed
+            if (platform === 'Vimeo') {
+                const oembedUrl = `https://vimeo.com/api/oembed.json?url=https://vimeo.com/${videoId}`;
+                const response = await fetch(oembedUrl);
+                if (response.ok) {
+                    const data = await response.json();
+                    return data.title;
+                }
+            }
+
+            // For other platforms, use URL as title fallback
+            console.log(`[BatchUI] Using fallback title for ${platform}`);
+        } catch (err) {
+            console.warn(`[BatchUI] Could not fetch title for ${platform}:`, err.message);
+        }
+
+        return `${platform} Video ${videoId}`;
     }
 
     async pasteFromClipboard() {

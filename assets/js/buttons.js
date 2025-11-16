@@ -734,7 +734,7 @@ startTranscription.addEventListener('click', async () => {
 
         // Check if it's a YouTube tab
         if (!tab.url || !isYouTubeVideoUrl(tab.url)) {
-            showAlert('Please open a YouTube video first', 'warning');
+            showAlert('Please open a video page first (YouTube, Vimeo, etc.)', 'warning');
             return;
         }
 
@@ -749,7 +749,7 @@ startTranscription.addEventListener('click', async () => {
             console.info('[Buttercup] Transcription start event dispatched');
         }).catch(err => {
             console.error('[Buttercup] Error starting transcription:', err);
-            showAlert('Error starting transcription. Make sure you are on a YouTube video page.', 'error');
+            showAlert('Error starting transcription. Make sure you are on a video page.', 'error');
         });
     } catch (error) {
         console.error('[Buttercup] Error in start transcription handler:', error);
@@ -761,10 +761,56 @@ startTranscription.addEventListener('click', async () => {
 
 let currentTranscriptData = null;
 
-// Helper function to check if URL is a valid YouTube video (watch or shorts)
-function isYouTubeVideoUrl(url) {
+// Helper function to check if URL is a valid video page (YouTube, Vimeo, Dailymotion, etc.)
+function isVideoPageUrl(url) {
     if (!url) return false;
-    return url.includes('youtube.com/watch') || url.includes('youtube.com/shorts');
+
+    // YouTube
+    if (url.includes('youtube.com/watch') || url.includes('youtube.com/shorts') || url.includes('youtu.be/')) {
+        return true;
+    }
+
+    // Vimeo
+    if (url.includes('vimeo.com/') && /vimeo\.com\/\d+/.test(url)) {
+        return true;
+    }
+
+    // Dailymotion
+    if (url.includes('dailymotion.com/video/') || url.includes('dai.ly/')) {
+        return true;
+    }
+
+    // Twitter/X
+    if ((url.includes('twitter.com/') || url.includes('x.com/')) && url.includes('/status/')) {
+        return true;
+    }
+
+    // TikTok
+    if (url.includes('tiktok.com/') && url.includes('/video/')) {
+        return true;
+    }
+
+    // Instagram
+    if (url.includes('instagram.com/') && (url.includes('/p/') || url.includes('/reel/') || url.includes('/tv/'))) {
+        return true;
+    }
+
+    // Facebook
+    if (url.includes('facebook.com/') && (url.includes('/videos/') || url.includes('/watch'))) {
+        return true;
+    }
+
+    // Twitch
+    if (url.includes('twitch.tv/videos/') || url.includes('twitch.tv/clip/')) {
+        return true;
+    }
+
+    return false;
+}
+
+// Legacy alias for backward compatibility
+function isYouTubeVideoUrl(url) {
+    return isVideoPageUrl(url);
 }
 
 // Helper function to extract video ID from URL
@@ -772,14 +818,57 @@ function getVideoIdFromTab(tab) {
     if (!tab || !tab.url) return null;
 
     const url = new URL(tab.url);
+    const hostname = url.hostname;
     const pathname = url.pathname;
 
-    if (pathname.startsWith('/clip')) {
-        return null; // Would need to parse from page, skipping for now
-    } else if (pathname.startsWith('/shorts')) {
-        return pathname.slice(8);
+    // YouTube
+    if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
+        if (pathname.startsWith('/clip')) {
+            return null;
+        } else if (pathname.startsWith('/shorts')) {
+            return pathname.slice(8);
+        }
+        return url.searchParams.get('v') || pathname.slice(1); // youtu.be/ID
     }
-    return url.searchParams.get('v');
+
+    // Vimeo
+    if (hostname.includes('vimeo.com')) {
+        const match = pathname.match(/\/(\d+)/);
+        return match ? match[1] : null;
+    }
+
+    // Dailymotion
+    if (hostname.includes('dailymotion.com')) {
+        const match = pathname.match(/\/video\/([a-zA-Z0-9]+)/);
+        return match ? match[1] : null;
+    }
+
+    // Twitter/X
+    if (hostname.includes('twitter.com') || hostname.includes('x.com')) {
+        const match = pathname.match(/\/status\/(\d+)/);
+        return match ? match[1] : null;
+    }
+
+    // TikTok
+    if (hostname.includes('tiktok.com')) {
+        const match = pathname.match(/\/video\/(\d+)/);
+        return match ? match[1] : null;
+    }
+
+    // Instagram
+    if (hostname.includes('instagram.com')) {
+        const match = pathname.match(/\/(?:p|reel|tv)\/([a-zA-Z0-9_-]+)/);
+        return match ? match[1] : null;
+    }
+
+    // Fallback: generate hash from URL
+    let hash = 0;
+    const str = tab.url;
+    for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash = hash & hash;
+    }
+    return Math.abs(hash).toString(36);
 }
 
 // Refresh transcript info for current video
@@ -789,7 +878,7 @@ async function refreshTranscriptInfo() {
         const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
 
         if (!tab || !tab.url || !isYouTubeVideoUrl(tab.url)) {
-            currentVideoIdEl.textContent = 'Not on a YouTube video';
+            currentVideoIdEl.textContent = 'Not on a video page';
             transcriptStatusBadge.textContent = 'N/A';
             transcriptStatusBadge.className = 'badge badge-sm badge-warning';
             transcriptDate.textContent = '';
@@ -1453,7 +1542,7 @@ showExistingSummary.addEventListener('click', async () => {
 
         // Check if it's a YouTube tab
         if (!tab.url || !isYouTubeVideoUrl(tab.url)) {
-            showAlert('Please open a YouTube video to view the summary', 'warning');
+            showAlert('Please open a video page to view the summary', 'warning');
             return;
         }
 

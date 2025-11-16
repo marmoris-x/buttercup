@@ -153,7 +153,24 @@ class CustomCaptionOverlay {
     }
 
     createOverlay() {
-        const playerContainer = document.querySelector('.html5-video-player');
+        // Try to find player container - support multiple platforms
+        let playerContainer = document.querySelector(
+            '.html5-video-player, ' +  // YouTube
+            '.vp-player, ' +             // Vimeo
+            '.dmp_Player, ' +            // Dailymotion
+            '[data-testid="videoPlayer"], ' + // Twitter
+            '.video-player'              // Generic
+        );
+
+        // Fallback: use video's parent element
+        if (!playerContainer && this.video) {
+            playerContainer = this.video.parentElement;
+            // Ensure container has relative positioning for absolute overlay
+            if (playerContainer && getComputedStyle(playerContainer).position === 'static') {
+                playerContainer.style.position = 'relative';
+            }
+        }
+
         if (!playerContainer) {
             console.error('[CaptionOverlay] Player container not found!');
             return;
