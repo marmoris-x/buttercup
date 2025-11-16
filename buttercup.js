@@ -169,9 +169,13 @@ const getButtercupApiSettings = new Promise((resolve) => {
             temperature: e.detail.temperature,
             responseFormat: e.detail.responseFormat
         });
+        // Expose to window for batch processor access
+        window.apiConfig = apiConfig;
 
         // Initialize transcription handler
         transcriptionHandler = new TranscriptionHandler(apiConfig);
+        // Expose to window for batch processor access
+        window.transcriptionHandler = transcriptionHandler;
 
         // Store LLM translation settings
         llmTranslationEnabled = e.detail.llmTranslationEnabled;
