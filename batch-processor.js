@@ -346,12 +346,16 @@ class BatchProcessor {
 
             // Process video with correct parameter order:
             // processVideo(videoId, translate, onProgress, onSuccess, onError)
-            const translateOption = video.options.translate || false;
+            // IMPORTANT: We pass FALSE for Whisper translation - we want transcription only!
+            // LLM translation is handled separately after transcription completes.
+            // Whisper translation only translates to English, which is not what we want.
+            const useWhisperTranslation = false; // Always use transcription mode
+            const translateOption = video.options.translate || false; // This is for LLM translation
 
             await new Promise((resolve, reject) => {
                 window.transcriptionHandler.processVideo(
                     video.videoId,
-                    translateOption,
+                    useWhisperTranslation, // Use transcription, not Whisper translation
                     // onProgress callback - transcription.js only passes status string as first param
                     (statusText) => {
                         video.currentStep = statusText || 'Processing...';
