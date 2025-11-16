@@ -46,30 +46,42 @@ def get_audio():
         return jsonify({"error": "URL parameter is missing"}), 400
 
     output_path = None  # Initialize output_path
+    actual_file = None  # Track the actual downloaded file
     try:
-        # Generate a unique filename for the downloaded audio
-        unique_filename = f"{uuid.uuid4()}.mp3"
-        output_path = os.path.join(TEMP_DIR, unique_filename)
+        # Generate a unique base filename (without extension - yt-dlp adds it)
+        unique_id = str(uuid.uuid4())
+        base_path = os.path.join(TEMP_DIR, unique_id)
 
-        # yt-dlp options to download audio only
+        # yt-dlp options optimized for speed:
+        # - Download lowest quality audio (sufficient for speech recognition)
+        # - No conversion (skip FFmpeg processing entirely)
+        # - Native format (webm/m4a/ogg - all supported by Whisper)
         ydl_opts = {
-            'format': 'bestaudio/best',
-            'outtmpl': os.path.splitext(output_path)[0],
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            'verbose': True, # Get all the debug info from yt-dlp
-            'ffmpeg_location': os.path.dirname(os.path.abspath(__file__))
+            'format': 'worstaudio/worst',  # Lowest quality = fastest download + smaller file
+            'outtmpl': base_path + '.%(ext)s',  # Let yt-dlp add the extension
+            'quiet': False,
+            'no_warnings': False,
+            # No postprocessors = no FFmpeg conversion = much faster
         }
-        logging.info(f"Using yt-dlp options: {ydl_opts}")
+        logging.info(f"Using optimized yt-dlp options: {ydl_opts}")
 
         try:
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 logging.info(f"Starting download for {video_url}")
-                ydl.download([video_url])
+                info = ydl.extract_info(video_url, download=True)
                 logging.info(f"Finished download for {video_url}")
+
+                # Get the actual downloaded file path
+                if 'requested_downloads' in info and info['requested_downloads']:
+                    actual_file = info['requested_downloads'][0]['filepath']
+                else:
+                    # Fallback: find the file with our unique ID
+                    for ext in ['webm', 'm4a', 'ogg', 'opus', 'mp3', 'mp4', 'wav']:
+                        potential_file = f"{base_path}.{ext}"
+                        if os.path.exists(potential_file):
+                            actual_file = potential_file
+                            break
+
         except yt_dlp.utils.DownloadError as e:
             logging.error(f"yt-dlp download failed: {e}")
             return jsonify({"error": f"yt-dlp failed: {e}"}), 500
@@ -79,11 +91,26 @@ def get_audio():
 
 
         # Check if the file was created
-        if not os.path.exists(output_path):
-            logging.error(f"Audio file not found after download attempt: {output_path}")
+        if not actual_file or not os.path.exists(actual_file):
+            logging.error(f"Audio file not found after download attempt")
             return jsonify({"error": "Failed to download audio, file not created"}), 500
 
-        logging.info(f"Successfully created audio file: {output_path}")
+        file_size = os.path.getsize(actual_file)
+        file_ext = os.path.splitext(actual_file)[1]
+        logging.info(f"Successfully created audio file: {actual_file} ({file_size / 1024 / 1024:.2f} MB)")
+
+        # Determine MIME type based on extension
+        mime_types = {
+            '.webm': 'audio/webm',
+            '.m4a': 'audio/mp4',
+            '.ogg': 'audio/ogg',
+            '.opus': 'audio/opus',
+            '.mp3': 'audio/mpeg',
+            '.mp4': 'audio/mp4',
+            '.wav': 'audio/wav',
+        }
+        mime_type = mime_types.get(file_ext, 'audio/mpeg')
+        download_name = f'audio{file_ext}'
 
         # Schedule delayed cleanup to avoid Windows file locking issues
         def delayed_cleanup(file_path, delay=5):
@@ -97,18 +124,18 @@ def get_audio():
                 logging.warning(f"Could not delete temporary file {file_path}: {e}")
 
         # Start cleanup in background thread
-        cleanup_thread = threading.Thread(target=delayed_cleanup, args=(output_path,), daemon=True)
+        cleanup_thread = threading.Thread(target=delayed_cleanup, args=(actual_file,), daemon=True)
         cleanup_thread.start()
 
         # Send the file and let the background thread handle cleanup
-        return send_file(output_path, as_attachment=True, download_name='audio.mp3', mimetype='audio/mpeg')
+        return send_file(actual_file, as_attachment=True, download_name=download_name, mimetype=mime_type)
 
     except Exception as e:
         logging.error(f"A general error occurred in get_audio: {e}", exc_info=True)
         # Clean up the file even if sending fails
-        if output_path and os.path.exists(output_path):
-            logging.info(f"Cleaning up temporary file after error: {output_path}")
-            os.remove(output_path)
+        if actual_file and os.path.exists(actual_file):
+            logging.info(f"Cleaning up temporary file after error: {actual_file}")
+            os.remove(actual_file)
         return jsonify({"error": str(e)}), 500
 
 if __name__ == '__main__':

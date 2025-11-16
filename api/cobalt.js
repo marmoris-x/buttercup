@@ -122,7 +122,7 @@ class CobaltAPI {
             console.info(`[Buttercup] Requesting audio from local server: ${requestUrl}`);
 
             // Wrap download in retry logic
-            const audioBlob = await this.retryWithBackoff(async () => {
+            const result = await this.retryWithBackoff(async () => {
                 // Fetch the audio from our local server
                 const response = await fetch(requestUrl);
 
@@ -139,6 +139,16 @@ class CobaltAPI {
                     throw this.parseServerError(response.status, errorMessage);
                 }
 
+                // Get filename from Content-Disposition header
+                let filename = 'audio.webm'; // Default
+                const contentDisposition = response.headers.get('Content-Disposition');
+                if (contentDisposition) {
+                    const match = contentDisposition.match(/filename="?([^";\s]+)"?/);
+                    if (match) {
+                        filename = match[1];
+                    }
+                }
+
                 // The response from our server is the audio file itself
                 const blob = await response.blob();
 
@@ -147,13 +157,30 @@ class CobaltAPI {
                     throw new Error('Received empty or invalid audio from local server');
                 }
 
-                return blob;
+                // Fallback: determine extension from MIME type if no header
+                if (filename === 'audio.webm' && blob.type) {
+                    const mimeToExt = {
+                        'audio/webm': 'audio.webm',
+                        'audio/mp4': 'audio.m4a',
+                        'audio/ogg': 'audio.ogg',
+                        'audio/opus': 'audio.opus',
+                        'audio/mpeg': 'audio.mp3',
+                        'audio/wav': 'audio.wav',
+                    };
+                    filename = mimeToExt[blob.type] || filename;
+                }
+
+                return { blob, filename };
             }, 3, 2000); // 3 retries, starting with 2 second delay
+
+            const audioBlob = result.blob;
+            const filename = result.filename;
 
             console.info('[Buttercup] Audio successfully received from local server:', {
                 size: `${(audioBlob.size / 1024 / 1024).toFixed(2)} MB`,
                 type: audioBlob.type || 'unknown',
-                sizeBytes: audioBlob.size
+                sizeBytes: audioBlob.size,
+                filename: filename
             });
 
             // The TranscriptionHandler expects an object with a `url` property,
@@ -164,7 +191,7 @@ class CobaltAPI {
             // We will return an object that looks like the original one, but with a blob URL.
             return {
                 url: URL.createObjectURL(audioBlob),
-                filename: 'audio.mp3'
+                filename: filename
             };
 
         } catch (error) {
