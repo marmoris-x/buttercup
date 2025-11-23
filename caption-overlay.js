@@ -378,6 +378,9 @@ class CustomCaptionOverlay {
     setupResizeObserver() {
         if (!this.video || !this.overlay) return;
 
+        // Store last known position to detect changes
+        this.lastVideoRect = null;
+
         // Observe video element for size/position changes
         this.resizeObserver = new ResizeObserver(() => {
             this.updateOverlayPosition();
@@ -388,7 +391,42 @@ class CustomCaptionOverlay {
         // Also observe window resize
         window.addEventListener('resize', () => this.updateOverlayPosition());
 
-        console.info('[CaptionOverlay] ✓ Resize observer active');
+        // CRITICAL: Periodic position check as failsafe (GLOBAL solution)
+        // Video position can change due to:
+        // - Layout changes (YouTube theater mode, sidebar collapse, etc.)
+        // - Container resizing without triggering ResizeObserver
+        // - Platform-specific UI changes
+        // Check every 1 second and update if position changed
+        this.positionCheckInterval = setInterval(() => {
+            if (!this.video || !this.overlay) return;
+
+            const currentRect = this.video.getBoundingClientRect();
+
+            // Check if position or size changed significantly (>1px to avoid jitter)
+            if (this.lastVideoRect) {
+                const posChanged = Math.abs(currentRect.left - this.lastVideoRect.left) > 1 ||
+                                 Math.abs(currentRect.top - this.lastVideoRect.top) > 1 ||
+                                 Math.abs(currentRect.bottom - this.lastVideoRect.bottom) > 1 ||
+                                 Math.abs(currentRect.width - this.lastVideoRect.width) > 1 ||
+                                 Math.abs(currentRect.height - this.lastVideoRect.height) > 1;
+
+                if (posChanged) {
+                    console.info('[CaptionOverlay] Video position/size changed, updating overlay');
+                    this.updateOverlayPosition();
+                }
+            }
+
+            // Store current rect for next comparison
+            this.lastVideoRect = {
+                left: currentRect.left,
+                top: currentRect.top,
+                bottom: currentRect.bottom,
+                width: currentRect.width,
+                height: currentRect.height
+            };
+        }, 1000); // Check every 1 second
+
+        console.info('[CaptionOverlay] ✓ Resize observer + periodic position check active');
     }
 
     /**
@@ -884,6 +922,12 @@ class CustomCaptionOverlay {
         if (this.urlCheckInterval) {
             clearInterval(this.urlCheckInterval);
             this.urlCheckInterval = null;
+        }
+
+        // Clear position check interval
+        if (this.positionCheckInterval) {
+            clearInterval(this.positionCheckInterval);
+            this.positionCheckInterval = null;
         }
 
         if (this.rafId) {
