@@ -576,11 +576,13 @@ function saveCaptionSettings() {
         }
 
         // Notify content script about settings change
+        // CRITICAL: Use world: 'MAIN' to dispatch event in page context where caption-overlay.js lives
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (chrome.runtime.lastError || !tabs || !tabs[0]) return;
 
             chrome.scripting.executeScript({
                 target: { tabId: tabs[0].id },
+                world: 'MAIN', // CRITICAL: Dispatch in MAIN world for GLOBAL compatibility
                 func: (settings) => {
                     document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
                         detail: {
