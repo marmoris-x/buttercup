@@ -289,7 +289,8 @@ class CustomCaptionOverlay {
 
         // Calculate bottom position based on vertical position setting
         // verticalPosition is percentage from bottom (0-50%)
-        const bottomPosition = `${this.settings.verticalPosition}%`;
+        // CRITICAL: Calculate in PIXELS relative to VIDEO height, not viewport!
+        const bottomOffsetPx = videoHeight * (this.settings.verticalPosition / 100);
 
         // Horizontal alignment based on setting
         let justifyContent;
@@ -307,7 +308,7 @@ class CustomCaptionOverlay {
         this.overlay.style.cssText = `
             position: fixed;
             left: ${videoRect.left}px;
-            bottom: calc(100vh - ${videoRect.bottom}px + ${bottomPosition});
+            bottom: calc(100vh - ${videoRect.bottom}px + ${bottomOffsetPx}px);
             width: ${videoWidth}px;
             height: auto;
             max-height: ${videoHeight}px;
@@ -403,8 +404,8 @@ class CustomCaptionOverlay {
         const videoWidth = this.video.offsetWidth || videoRect.width;
         const videoHeight = this.video.offsetHeight || videoRect.height;
 
-        // Calculate bottom position based on vertical position setting
-        const bottomPosition = `${this.settings.verticalPosition}%`;
+        // Calculate bottom position in PIXELS relative to VIDEO height
+        const bottomOffsetPx = videoHeight * (this.settings.verticalPosition / 100);
 
         // Horizontal alignment based on setting
         let justifyContent;
@@ -418,7 +419,7 @@ class CustomCaptionOverlay {
 
         // Update overlay position and size (viewport-relative with flexible positioning)
         this.overlay.style.left = `${videoRect.left}px`;
-        this.overlay.style.bottom = `calc(100vh - ${videoRect.bottom}px + ${bottomPosition})`;
+        this.overlay.style.bottom = `calc(100vh - ${videoRect.bottom}px + ${bottomOffsetPx}px)`;
         this.overlay.style.width = `${videoWidth}px`;
         this.overlay.style.maxHeight = `${videoHeight}px`;
         this.overlay.style.justifyContent = justifyContent;

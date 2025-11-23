@@ -1070,13 +1070,19 @@ async function refreshTranscriptInfo() {
 
                 // Show caption toggle
                 captionToggleContainer.style.display = 'flex';
-                // Query current caption state from content script
+
+                // Set default state: Visible (true) - matches caption default behavior
+                captionVisibilityToggle.checked = true;
+                captionStatusText.textContent = 'Visible';
+
+                // Query current caption state from content script to update if different
                 if (typeof chrome !== 'undefined' && chrome.tabs) {
                     chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                         if (tabs && tabs[0]) {
                             chrome.tabs.sendMessage(tabs[0].id, { type: 'GET_CAPTION_STATE' }, (response) => {
                                 if (chrome.runtime.lastError) {
                                     console.warn('[Popup] Could not get caption state:', chrome.runtime.lastError.message);
+                                    // Keep default visible state
                                     return;
                                 }
                                 if (response && response.isVisible !== undefined) {
