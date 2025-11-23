@@ -401,15 +401,34 @@ class CustomCaptionOverlay {
 
         this.resizeObserver.observe(this.video);
 
-        // Also observe window resize
-        window.addEventListener('resize', () => this.updateOverlayPosition());
+        // CRITICAL: Observe video container for mutations (theater mode, fullscreen, etc.)
+        const videoContainer = this.video.parentElement;
+        if (videoContainer) {
+            this.containerObserver = new MutationObserver(() => {
+                this.updateOverlayPosition();
+            });
+            this.containerObserver.observe(videoContainer, {
+                attributes: true,
+                attributeFilter: ['class', 'style']
+            });
+        }
 
-        // CRITICAL: Periodic position check as failsafe (GLOBAL solution)
+        // Also observe window resize
+        this.boundWindowResize = () => this.updateOverlayPosition();
+        window.addEventListener('resize', this.boundWindowResize);
+
+        // Observe scroll events
+        this.boundScroll = () => this.updateOverlayPosition();
+        window.addEventListener('scroll', this.boundScroll, { passive: true });
+
+        // CRITICAL: AGGRESSIVE periodic position check (250ms = 4 times per second)
+        // This is the ULTIMATE FAILSAFE that ensures subtitles NEVER drift
         // Video position can change due to:
         // - Layout changes (YouTube theater mode, sidebar collapse, etc.)
         // - Container resizing without triggering ResizeObserver
-        // - Platform-specific UI changes
-        // Check every 1 second and update if position changed
+        // - Platform-specific UI changes (TikTok, YouTube, etc.)
+        // - Scroll events
+        // - Dynamic content loading
         this.positionCheckInterval = setInterval(() => {
             if (!this.video || !this.overlay) return;
 
@@ -437,9 +456,9 @@ class CustomCaptionOverlay {
                 width: currentRect.width,
                 height: currentRect.height
             };
-        }, 1000); // Check every 1 second
+        }, 250); // AGGRESSIVE: Check every 250ms (4x per second) for MAXIMUM stability
 
-        console.info('[CaptionOverlay] ✓ Resize observer + periodic position check active');
+        console.info('[CaptionOverlay] ✓ MAXIMUM STABILITY: ResizeObserver + MutationObserver + Scroll + 250ms position check');
     }
 
     /**
@@ -981,6 +1000,24 @@ class CustomCaptionOverlay {
         if (this.resizeObserver) {
             this.resizeObserver.disconnect();
             this.resizeObserver = null;
+        }
+
+        // Disconnect container observer
+        if (this.containerObserver) {
+            this.containerObserver.disconnect();
+            this.containerObserver = null;
+        }
+
+        // Remove window resize listener
+        if (this.boundWindowResize) {
+            window.removeEventListener('resize', this.boundWindowResize);
+            this.boundWindowResize = null;
+        }
+
+        // Remove scroll listener
+        if (this.boundScroll) {
+            window.removeEventListener('scroll', this.boundScroll);
+            this.boundScroll = null;
         }
 
         // Remove custom toggle button

@@ -411,6 +411,62 @@ document.addEventListener('buttercupStorageRequest', function (e) {
 
 document.dispatchEvent(new CustomEvent('buttercupSettingsChanged'));
 
+// CRITICAL: Chrome Storage Change Listener for LIVE caption settings updates
+// This is MORE RELIABLE than message passing because it always works
+if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged) {
+    chrome.storage.onChanged.addListener((changes, areaName) => {
+        if (areaName !== 'sync') return;
+
+        // Check if any caption settings changed
+        const captionSettingsChanged =
+            changes.buttercup_caption_font_size ||
+            changes.buttercup_caption_vertical_position ||
+            changes.buttercup_caption_horizontal_position ||
+            changes.buttercup_caption_font_color ||
+            changes.buttercup_caption_bg_color ||
+            changes.buttercup_caption_bg_opacity;
+
+        if (captionSettingsChanged) {
+            // Build settings object with new values
+            const settings = {};
+
+            if (changes.buttercup_caption_font_size) {
+                settings.fontSize = changes.buttercup_caption_font_size.newValue;
+            }
+            if (changes.buttercup_caption_vertical_position) {
+                settings.verticalPosition = changes.buttercup_caption_vertical_position.newValue;
+            }
+            if (changes.buttercup_caption_horizontal_position) {
+                settings.horizontalPosition = changes.buttercup_caption_horizontal_position.newValue;
+            }
+            if (changes.buttercup_caption_font_color) {
+                settings.fontColor = changes.buttercup_caption_font_color.newValue;
+            }
+            if (changes.buttercup_caption_bg_color) {
+                settings.backgroundColor = changes.buttercup_caption_bg_color.newValue;
+            }
+            if (changes.buttercup_caption_bg_opacity) {
+                settings.backgroundOpacity = changes.buttercup_caption_bg_opacity.newValue;
+            }
+
+            // Inject script to dispatch event in MAIN world
+            const script = document.createElement('script');
+            script.textContent = `
+                (function() {
+                    console.warn('[Buttercup] LIVE UPDATE detected via Storage Change');
+                    document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
+                        detail: ${JSON.stringify(settings)}
+                    }));
+                })();
+            `;
+            (document.head || document.documentElement).appendChild(script);
+            script.remove();
+
+            console.info('[Buttercup] Caption settings updated via Storage listener:', settings);
+        }
+    });
+}
+
 // Listen for messages from popup and other components
 if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage) {
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
