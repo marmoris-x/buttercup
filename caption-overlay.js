@@ -188,6 +188,16 @@ class CustomCaptionOverlay {
                 this.applySettings();
             }
         });
+
+        // CRITICAL: Create GLOBAL function that can be called directly from content script
+        // This is the MOST RELIABLE method for cross-world communication
+        window.updateButtercupCaptionSettings = (settings) => {
+            console.warn('[Buttercup] ⚡ DIRECT UPDATE called with:', settings);
+            this.settings = { ...this.settings, ...settings };
+            this.applySettings();
+        };
+
+        console.info('[CaptionOverlay] ✓ Global update function registered: window.updateButtercupCaptionSettings');
     }
 
     /**

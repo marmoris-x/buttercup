@@ -449,14 +449,22 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.onChanged)
                 settings.backgroundOpacity = changes.buttercup_caption_bg_opacity.newValue;
             }
 
-            // Inject script to dispatch event in MAIN world
+            // CRITICAL: DIRECT function call - the ONLY way that ALWAYS works
+            // Inject script that calls the global function directly
             const script = document.createElement('script');
             script.textContent = `
                 (function() {
-                    console.warn('[Buttercup] LIVE UPDATE detected via Storage Change');
-                    document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
-                        detail: ${JSON.stringify(settings)}
-                    }));
+                    console.warn('[Buttercup] ⚡⚡⚡ STORAGE CHANGE DETECTED - Calling direct update');
+                    if (typeof window.updateButtercupCaptionSettings === 'function') {
+                        window.updateButtercupCaptionSettings(${JSON.stringify(settings)});
+                        console.warn('[Buttercup] ✅ Direct update function called successfully');
+                    } else {
+                        console.error('[Buttercup] ❌ Global update function not found!');
+                        // Fallback to event
+                        document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
+                            detail: ${JSON.stringify(settings)}
+                        }));
+                    }
                 })();
             `;
             (document.head || document.documentElement).appendChild(script);
@@ -527,17 +535,23 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
 
         if (message.type === 'UPDATE_CAPTION_SETTINGS') {
             // CRITICAL: Update caption settings globally for all platforms
-            // We need to dispatch event in MAIN world where caption-overlay.js listens
-            // Content script runs in ISOLATED world, so we inject a script tag to dispatch in MAIN world
+            // DIRECT function call - the ONLY reliable method
             if (message.settings) {
                 // Create and inject script element that runs in MAIN world
                 const script = document.createElement('script');
                 script.textContent = `
                     (function() {
-                        document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
-                            detail: ${JSON.stringify(message.settings)}
-                        }));
-                        console.info('[Buttercup] Caption settings updated globally');
+                        console.warn('[Buttercup] ⚡⚡⚡ MESSAGE RECEIVED - Calling direct update');
+                        if (typeof window.updateButtercupCaptionSettings === 'function') {
+                            window.updateButtercupCaptionSettings(${JSON.stringify(message.settings)});
+                            console.warn('[Buttercup] ✅ Direct update via message successful');
+                        } else {
+                            console.error('[Buttercup] ❌ Global update function not found!');
+                            // Fallback to event
+                            document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
+                                detail: ${JSON.stringify(message.settings)}
+                            }));
+                        }
                     })();
                 `;
                 (document.head || document.documentElement).appendChild(script);
