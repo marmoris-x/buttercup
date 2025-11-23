@@ -442,11 +442,9 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
 
         if (message.type === 'GET_CAPTION_STATE') {
             // Get current caption visibility state
-            // We need to query the page's overlay instance
-
             let responded = false;
 
-            // Listen for response from page with timeout
+            // Listen for response from overlay
             const listener = (e) => {
                 if (!responded) {
                     responded = true;
@@ -456,43 +454,17 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
             };
             document.addEventListener('buttercupCaptionStateResponse', listener);
 
-            // Set timeout to ensure we always respond
+            // Request state from overlay
+            document.dispatchEvent(new CustomEvent('buttercupCaptionStateRequest'));
+
+            // Timeout: default to visible (true) if no response
             setTimeout(() => {
                 if (!responded) {
                     responded = true;
                     document.removeEventListener('buttercupCaptionStateResponse', listener);
-                    sendResponse({ isVisible: false });
+                    sendResponse({ isVisible: true }); // Default to visible
                 }
-            }, 1000);
-
-            // Inject script to query overlay state
-            const script = document.createElement('script');
-            script.textContent = `
-                (function() {
-                    const overlay = window.buttercupCaptionOverlay;
-                    if (overlay) {
-                        document.dispatchEvent(new CustomEvent('buttercupCaptionStateResponse', {
-                            detail: { isVisible: overlay.isVisible }
-                        }));
-                    } else {
-                        document.dispatchEvent(new CustomEvent('buttercupCaptionStateResponse', {
-                            detail: { isVisible: false }
-                        }));
-                    }
-                })();
-            `;
-
-            try {
-                document.documentElement.appendChild(script);
-                script.remove();
-            } catch (error) {
-                // If script injection fails, send default response
-                if (!responded) {
-                    responded = true;
-                    document.removeEventListener('buttercupCaptionStateResponse', listener);
-                    sendResponse({ isVisible: false });
-                }
-            }
+            }, 500);
 
             return true; // Keep message channel open for async response
         }

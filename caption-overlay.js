@@ -571,6 +571,14 @@ class CustomCaptionOverlay {
         const isShorts = window.location.pathname.includes('/shorts/');
         const isYouTube = window.location.hostname.includes('youtube.com');
 
+        // CRITICAL: Set up state query listener for popup
+        // This allows popup to get current caption visibility state
+        document.addEventListener('buttercupCaptionStateRequest', () => {
+            document.dispatchEvent(new CustomEvent('buttercupCaptionStateResponse', {
+                detail: { isVisible: this.isVisible }
+            }));
+        });
+
         // CRITICAL: Set up popup toggle listener FIRST, for ALL platforms
         // This ensures popup toggle always works regardless of platform
         document.addEventListener('buttercupToggleCaptions', (e) => {
