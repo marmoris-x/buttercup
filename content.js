@@ -468,5 +468,19 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
 
             return true; // Keep message channel open for async response
         }
+
+        if (message.type === 'UPDATE_CAPTION_SETTINGS') {
+            // CRITICAL: Update caption settings globally for all platforms
+            // Dispatch event in page context where caption-overlay.js listens
+            if (message.settings) {
+                document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
+                    detail: message.settings
+                }));
+                sendResponse({ success: true });
+            } else {
+                sendResponse({ success: false, error: 'No settings provided' });
+            }
+            return true;
+        }
     });
 }

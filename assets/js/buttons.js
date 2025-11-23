@@ -576,34 +576,26 @@ function saveCaptionSettings() {
         }
 
         // Notify content script about settings change
-        // CRITICAL: Use world: 'MAIN' to dispatch event in page context where caption-overlay.js lives
+        // CRITICAL: Send message to content script which will dispatch event in MAIN world
+        // This is more robust than chrome.scripting.executeScript for all platforms
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (chrome.runtime.lastError || !tabs || !tabs[0]) return;
 
-            chrome.scripting.executeScript({
-                target: { tabId: tabs[0].id },
-                world: 'MAIN', // CRITICAL: Dispatch in MAIN world for GLOBAL compatibility
-                func: (settings) => {
-                    document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
-                        detail: {
-                            fontSize: settings.fontSize,
-                            verticalPosition: settings.verticalPosition,
-                            horizontalPosition: settings.horizontalPosition,
-                            fontColor: settings.fontColor,
-                            backgroundColor: settings.bgColor,
-                            backgroundOpacity: settings.bgOpacity
-                        }
-                    }));
-                },
-                args: [{
+            chrome.tabs.sendMessage(tabs[0].id, {
+                type: 'UPDATE_CAPTION_SETTINGS',
+                settings: {
                     fontSize: parseInt(captionFontSize.value),
                     verticalPosition: parseInt(captionVerticalPosition.value),
                     horizontalPosition: captionHorizontalPosition.value,
                     fontColor: captionFontColor.value,
-                    bgColor: captionBgColor.value,
-                    bgOpacity: parseFloat(captionBgOpacity.value / 100)
-                }]
-            }).catch(err => console.error('[Buttercup] Error:', err));
+                    backgroundColor: captionBgColor.value,
+                    backgroundOpacity: parseFloat(captionBgOpacity.value / 100)
+                }
+            }, (response) => {
+                if (chrome.runtime.lastError) {
+                    console.warn('[Buttercup] Could not send settings update:', chrome.runtime.lastError.message);
+                }
+            });
         });
     });
 }
