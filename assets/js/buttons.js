@@ -609,19 +609,20 @@ function saveCaptionSettings() {
 captionFontSize.addEventListener('input', () => {
     fontSizeValue.textContent = captionFontSize.value;
     updateCaptionPreview();
+    // LIVE UPDATE: Apply font size changes immediately while dragging
+    saveCaptionSettings();
 });
-
-captionFontSize.addEventListener('change', saveCaptionSettings);
 
 captionVerticalPosition.addEventListener('input', () => {
     captionVerticalValue.textContent = captionVerticalPosition.value + '%';
+    // LIVE UPDATE: Apply vertical position changes immediately while dragging
+    saveCaptionSettings();
 });
-
-captionVerticalPosition.addEventListener('change', saveCaptionSettings);
 
 captionHorizontalPosition.addEventListener('change', () => {
     const value = captionHorizontalPosition.value;
     captionHorizontalValue.textContent = value.charAt(0).toUpperCase() + value.slice(1);
+    // LIVE UPDATE: Apply horizontal position changes immediately
     saveCaptionSettings();
 });
 
@@ -658,9 +659,9 @@ captionBgColorText.addEventListener('input', () => {
 captionBgOpacity.addEventListener('input', () => {
     captionOpacityValue.textContent = captionBgOpacity.value + '%';
     updateCaptionPreview();
+    // LIVE UPDATE: Apply opacity changes immediately while dragging
+    saveCaptionSettings();
 });
-
-captionBgOpacity.addEventListener('change', saveCaptionSettings);
 
 // Dark Mode Toggle
 darkMode.addEventListener('change', () => {

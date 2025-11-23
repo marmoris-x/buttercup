@@ -303,6 +303,7 @@ class CustomCaptionOverlay {
 
         // CRITICAL: Use position: fixed to completely separate overlay from video
         // This prevents overlay from interfering with video rendering pipeline
+        // Z-INDEX: Low value (10) to stay UNDER video controls but OVER video
         this.overlay.style.cssText = `
             position: fixed;
             left: ${videoRect.left}px;
@@ -310,7 +311,7 @@ class CustomCaptionOverlay {
             width: ${videoWidth}px;
             height: auto;
             max-height: ${videoHeight}px;
-            z-index: 9999;
+            z-index: 10;
             pointer-events: none !important;
             display: flex;
             justify-content: ${justifyContent};
