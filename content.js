@@ -471,11 +471,22 @@ if (typeof chrome !== 'undefined' && chrome.runtime && chrome.runtime.onMessage)
 
         if (message.type === 'UPDATE_CAPTION_SETTINGS') {
             // CRITICAL: Update caption settings globally for all platforms
-            // Dispatch event in page context where caption-overlay.js listens
+            // We need to dispatch event in MAIN world where caption-overlay.js listens
+            // Content script runs in ISOLATED world, so we inject a script tag to dispatch in MAIN world
             if (message.settings) {
-                document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
-                    detail: message.settings
-                }));
+                // Create and inject script element that runs in MAIN world
+                const script = document.createElement('script');
+                script.textContent = `
+                    (function() {
+                        document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
+                            detail: ${JSON.stringify(message.settings)}
+                        }));
+                        console.info('[Buttercup] Caption settings updated globally');
+                    })();
+                `;
+                (document.head || document.documentElement).appendChild(script);
+                script.remove();
+
                 sendResponse({ success: true });
             } else {
                 sendResponse({ success: false, error: 'No settings provided' });
