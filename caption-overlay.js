@@ -37,6 +37,11 @@ class CustomCaptionOverlay {
         this.captions.sort((a, b) => a.tStartMs - b.tStartMs);
 
         console.info('[CaptionOverlay] Initializing with', this.captions.length, 'caption events for video:', this.videoId);
+
+        // CRITICAL: Setup settings listener IMMEDIATELY so live updates work
+        // This must happen before waiting for video, otherwise updates are missed
+        this.setupSettingsListener();
+
         this.init();
     }
 
@@ -47,7 +52,6 @@ class CustomCaptionOverlay {
                 this.createOverlay();
                 this.startTracking();
                 this.setupToggleListener();
-                this.setupSettingsListener();
                 this.setupVideoObserver();
                 this.setupURLObserver();
             });
@@ -188,9 +192,15 @@ class CustomCaptionOverlay {
 
     /**
      * Apply current settings to the overlay
+     * CRITICAL: This is called when settings change via Advanced menu
      */
     applySettings() {
-        if (!this.overlay || !this.captionElement) return;
+        if (!this.overlay || !this.captionElement) {
+            console.info('[CaptionOverlay] Overlay not ready yet, settings will be applied when created');
+            return;
+        }
+
+        console.info('[CaptionOverlay] Applying settings LIVE:', this.settings);
 
         // Update overlay positioning based on new flexible settings
         this.updateOverlayPosition();
@@ -204,7 +214,10 @@ class CustomCaptionOverlay {
         this.captionElement.style.background = bgColor;
         this.captionElement.style.fontFamily = this.settings.fontFamily;
 
-        console.info('[CaptionOverlay] Settings applied to overlay');
+        // Force repaint by triggering a caption update
+        this.forceUpdate();
+
+        console.info('[CaptionOverlay] ✓ Settings applied LIVE to overlay');
     }
 
     /**
