@@ -458,12 +458,24 @@
                 </div>
 
                 <label class="label mt-3">
-                    <span class="label-text">Position</span>
+                    <span class="label-text">Vertical Position (from bottom)</span>
+                    <span class="label-text-alt" id="caption-vertical-value">15%</span>
                 </label>
-                <select class="select select-bordered select-sm w-full" id="caption-position">
-                    <option value="bottom">Bottom</option>
-                    <option value="middle">Middle</option>
-                    <option value="top">Top</option>
+                <input type="range" min="0" max="50" value="15" class="range range-sm range-primary" id="caption-vertical-position" />
+                <div class="w-full flex justify-between text-xs px-2">
+                    <span>0% (Bottom)</span>
+                    <span>25%</span>
+                    <span>50% (Higher)</span>
+                </div>
+
+                <label class="label mt-3">
+                    <span class="label-text">Horizontal Position</span>
+                    <span class="label-text-alt" id="caption-horizontal-value">Center</span>
+                </label>
+                <select class="select select-bordered select-sm w-full" id="caption-horizontal-position">
+                    <option value="center">Center</option>
+                    <option value="left">Left</option>
+                    <option value="right">Right</option>
                 </select>
 
                 <label class="label mt-3">

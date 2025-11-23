@@ -85,7 +85,8 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
         'buttercup_temperature',
         'buttercup_response_format',
         'buttercup_caption_font_size',
-        'buttercup_caption_position',
+        'buttercup_caption_vertical_position',
+        'buttercup_caption_horizontal_position',
         'buttercup_caption_font_color',
         'buttercup_caption_bg_color',
         'buttercup_caption_bg_opacity',
@@ -155,8 +156,12 @@ if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
         defaultSettings.buttercup_caption_font_size = 22;
     }
 
-    if (result.buttercup_caption_position === undefined) {
-        defaultSettings.buttercup_caption_position = 'bottom';
+    if (result.buttercup_caption_vertical_position === undefined) {
+        defaultSettings.buttercup_caption_vertical_position = 15; // 15% from bottom
+    }
+
+    if (result.buttercup_caption_horizontal_position === undefined) {
+        defaultSettings.buttercup_caption_horizontal_position = 'center';
     }
 
     if (result.buttercup_caption_font_color === undefined) {
@@ -307,7 +312,8 @@ document.addEventListener('requestButtercupCaptionSettings', function () {
     }
     chrome.storage.sync.get([
         'buttercup_caption_font_size',
-        'buttercup_caption_position',
+        'buttercup_caption_vertical_position',
+        'buttercup_caption_horizontal_position',
         'buttercup_caption_font_color',
         'buttercup_caption_bg_color',
         'buttercup_caption_bg_opacity',
@@ -317,7 +323,8 @@ document.addEventListener('requestButtercupCaptionSettings', function () {
         document.dispatchEvent(new CustomEvent('responseButtercupCaptionSettings', {
             detail: {
                 fontSize: result.buttercup_caption_font_size || 22,
-                position: result.buttercup_caption_position || 'bottom',
+                verticalPosition: result.buttercup_caption_vertical_position !== undefined ? result.buttercup_caption_vertical_position : 15,
+                horizontalPosition: result.buttercup_caption_horizontal_position || 'center',
                 fontColor: result.buttercup_caption_font_color || '#ffffff',
                 backgroundColor: result.buttercup_caption_bg_color || '#080808',
                 backgroundOpacity: result.buttercup_caption_bg_opacity !== undefined ? result.buttercup_caption_bg_opacity : 0.90,

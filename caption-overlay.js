@@ -25,7 +25,8 @@ class CustomCaptionOverlay {
         // Default customization settings
         this.settings = {
             fontSize: 22,
-            position: 'bottom',
+            verticalPosition: 15, // 15% from bottom
+            horizontalPosition: 'center',
             fontColor: '#ffffff',
             backgroundColor: '#080808',
             backgroundOpacity: 0.90,
@@ -152,7 +153,8 @@ class CustomCaptionOverlay {
                 if (e.detail) {
                     this.settings = {
                         fontSize: e.detail.fontSize || 22,
-                        position: e.detail.position || 'bottom',
+                        verticalPosition: e.detail.verticalPosition !== undefined ? e.detail.verticalPosition : 15,
+                        horizontalPosition: e.detail.horizontalPosition || 'center',
                         fontColor: e.detail.fontColor || '#ffffff',
                         backgroundColor: e.detail.backgroundColor || '#080808',
                         backgroundOpacity: e.detail.backgroundOpacity !== undefined ? e.detail.backgroundOpacity : 0.90,
@@ -190,24 +192,8 @@ class CustomCaptionOverlay {
     applySettings() {
         if (!this.overlay || !this.captionElement) return;
 
-        // Update overlay position
-        const positions = {
-            'top': '50px',
-            'middle': '50%',
-            'bottom': '90px'
-        };
-
-        this.overlay.style.bottom = positions[this.settings.position] || '90px';
-
-        if (this.settings.position === 'middle') {
-            this.overlay.style.transform = 'translateY(-50%)';
-            this.overlay.style.top = '50%';
-            this.overlay.style.bottom = 'auto';
-        } else {
-            this.overlay.style.transform = '';
-            this.overlay.style.top = this.settings.position === 'top' ? '50px' : 'auto';
-            this.overlay.style.bottom = this.settings.position === 'bottom' ? '90px' : 'auto';
-        }
+        // Update overlay positioning based on new flexible settings
+        this.updateOverlayPosition();
 
         // Update caption element styles
         this.captionElement.style.fontSize = `${this.settings.fontSize}px`;
@@ -301,14 +287,18 @@ class CustomCaptionOverlay {
         this.overlay.id = 'buttercup-caption-overlay';
         this.overlay.className = 'buttercup-overlay';
 
-        // Position-based vertical alignment
-        let verticalAlignment;
-        if (this.settings.position === 'top') {
-            verticalAlignment = 'flex-start';
-        } else if (this.settings.position === 'middle') {
-            verticalAlignment = 'center';
+        // Calculate bottom position based on vertical position setting
+        // verticalPosition is percentage from bottom (0-50%)
+        const bottomPosition = `${this.settings.verticalPosition}%`;
+
+        // Horizontal alignment based on setting
+        let justifyContent;
+        if (this.settings.horizontalPosition === 'left') {
+            justifyContent = 'flex-start';
+        } else if (this.settings.horizontalPosition === 'right') {
+            justifyContent = 'flex-end';
         } else {
-            verticalAlignment = 'flex-end'; // bottom (default)
+            justifyContent = 'center'; // default
         }
 
         // CRITICAL: Use position: fixed to completely separate overlay from video
@@ -316,17 +306,18 @@ class CustomCaptionOverlay {
         this.overlay.style.cssText = `
             position: fixed;
             left: ${videoRect.left}px;
-            top: ${videoRect.top}px;
+            bottom: calc(100vh - ${videoRect.bottom}px + ${bottomPosition});
             width: ${videoWidth}px;
-            height: ${videoHeight}px;
+            height: auto;
+            max-height: ${videoHeight}px;
             z-index: 9999;
             pointer-events: none !important;
             display: flex;
-            justify-content: center;
-            align-items: ${verticalAlignment};
+            justify-content: ${justifyContent};
+            align-items: flex-end;
             padding: 0;
             margin: 0;
-            overflow: hidden;
+            overflow: visible;
             box-sizing: border-box;
             transform: translateZ(0);
             will-change: transform;
@@ -348,7 +339,7 @@ class CustomCaptionOverlay {
             background: ${bgColor};
             color: ${this.settings.fontColor};
             padding: 0.4em 0.8em;
-            margin: ${this.settings.position === 'bottom' ? '0 0 5% 0' : '5% 0 0 0'};
+            margin: 0 1em;
             border-radius: 0.2em;
             font-size: ${responsiveFontSize}px;
             line-height: 1.4;
@@ -411,11 +402,25 @@ class CustomCaptionOverlay {
         const videoWidth = this.video.offsetWidth || videoRect.width;
         const videoHeight = this.video.offsetHeight || videoRect.height;
 
-        // Update overlay position and size (viewport-relative)
+        // Calculate bottom position based on vertical position setting
+        const bottomPosition = `${this.settings.verticalPosition}%`;
+
+        // Horizontal alignment based on setting
+        let justifyContent;
+        if (this.settings.horizontalPosition === 'left') {
+            justifyContent = 'flex-start';
+        } else if (this.settings.horizontalPosition === 'right') {
+            justifyContent = 'flex-end';
+        } else {
+            justifyContent = 'center';
+        }
+
+        // Update overlay position and size (viewport-relative with flexible positioning)
         this.overlay.style.left = `${videoRect.left}px`;
-        this.overlay.style.top = `${videoRect.top}px`;
+        this.overlay.style.bottom = `calc(100vh - ${videoRect.bottom}px + ${bottomPosition})`;
         this.overlay.style.width = `${videoWidth}px`;
-        this.overlay.style.height = `${videoHeight}px`;
+        this.overlay.style.maxHeight = `${videoHeight}px`;
+        this.overlay.style.justifyContent = justifyContent;
 
         // Update responsive font size
         if (this.captionElement) {

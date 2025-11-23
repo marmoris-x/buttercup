@@ -69,7 +69,10 @@ const llmModel = document.getElementById('llm-model');
 // Advanced settings elements
 const captionFontSize = document.getElementById('caption-font-size');
 const fontSizeValue = document.getElementById('font-size-value');
-const captionPosition = document.getElementById('caption-position');
+const captionVerticalPosition = document.getElementById('caption-vertical-position');
+const captionVerticalValue = document.getElementById('caption-vertical-value');
+const captionHorizontalPosition = document.getElementById('caption-horizontal-position');
+const captionHorizontalValue = document.getElementById('caption-horizontal-value');
 const captionFontColor = document.getElementById('caption-font-color');
 const captionFontColorText = document.getElementById('caption-font-color-text');
 const captionBgColor = document.getElementById('caption-bg-color');
@@ -561,7 +564,8 @@ function updateCaptionPreview() {
 function saveCaptionSettings() {
     chrome.storage.sync.set({
         buttercup_caption_font_size: parseInt(captionFontSize.value),
-        buttercup_caption_position: captionPosition.value,
+        buttercup_caption_vertical_position: parseInt(captionVerticalPosition.value),
+        buttercup_caption_horizontal_position: captionHorizontalPosition.value,
         buttercup_caption_font_color: captionFontColor.value,
         buttercup_caption_bg_color: captionBgColor.value,
         buttercup_caption_bg_opacity: parseFloat(captionBgOpacity.value / 100)
@@ -581,7 +585,8 @@ function saveCaptionSettings() {
                     document.dispatchEvent(new CustomEvent('buttercupCaptionSettingsChanged', {
                         detail: {
                             fontSize: settings.fontSize,
-                            position: settings.position,
+                            verticalPosition: settings.verticalPosition,
+                            horizontalPosition: settings.horizontalPosition,
                             fontColor: settings.fontColor,
                             backgroundColor: settings.bgColor,
                             backgroundOpacity: settings.bgOpacity
@@ -590,7 +595,8 @@ function saveCaptionSettings() {
                 },
                 args: [{
                     fontSize: parseInt(captionFontSize.value),
-                    position: captionPosition.value,
+                    verticalPosition: parseInt(captionVerticalPosition.value),
+                    horizontalPosition: captionHorizontalPosition.value,
                     fontColor: captionFontColor.value,
                     bgColor: captionBgColor.value,
                     bgOpacity: parseFloat(captionBgOpacity.value / 100)
@@ -607,7 +613,15 @@ captionFontSize.addEventListener('input', () => {
 
 captionFontSize.addEventListener('change', saveCaptionSettings);
 
-captionPosition.addEventListener('change', () => {
+captionVerticalPosition.addEventListener('input', () => {
+    captionVerticalValue.textContent = captionVerticalPosition.value + '%';
+});
+
+captionVerticalPosition.addEventListener('change', saveCaptionSettings);
+
+captionHorizontalPosition.addEventListener('change', () => {
+    const value = captionHorizontalPosition.value;
+    captionHorizontalValue.textContent = value.charAt(0).toUpperCase() + value.slice(1);
     saveCaptionSettings();
 });
 
@@ -1836,7 +1850,8 @@ chrome.storage.sync.get([
     'buttercup_llm_claude_api_key',
     'buttercup_llm_claude_model',
     'buttercup_caption_font_size',
-    'buttercup_caption_position',
+    'buttercup_caption_vertical_position',
+    'buttercup_caption_horizontal_position',
     'buttercup_caption_font_color',
     'buttercup_caption_bg_color',
     'buttercup_caption_bg_opacity',
@@ -1927,8 +1942,15 @@ chrome.storage.sync.get([
         fontSizeValue.textContent = result.buttercup_caption_font_size;
     }
 
-    if (result.buttercup_caption_position) {
-        captionPosition.value = result.buttercup_caption_position;
+    if (result.buttercup_caption_vertical_position !== undefined) {
+        captionVerticalPosition.value = result.buttercup_caption_vertical_position;
+        captionVerticalValue.textContent = result.buttercup_caption_vertical_position + '%';
+    }
+
+    if (result.buttercup_caption_horizontal_position) {
+        captionHorizontalPosition.value = result.buttercup_caption_horizontal_position;
+        const value = result.buttercup_caption_horizontal_position;
+        captionHorizontalValue.textContent = value.charAt(0).toUpperCase() + value.slice(1);
     }
 
     if (result.buttercup_caption_font_color) {
