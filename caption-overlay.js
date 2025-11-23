@@ -277,46 +277,24 @@ class CustomCaptionOverlay {
 
     createOverlay() {
         // UNIVERSAL APPROACH: Works on ANY video element on ANY platform
-        // No platform-specific code - just use the video element directly
+        // CRITICAL: Use position: fixed instead of absolute to avoid video compositing issues
 
         if (!this.video) {
             console.error('[CaptionOverlay] No video element available!');
             return;
         }
 
-        // Use video's parent as container
-        let playerContainer = this.video.parentElement;
-
-        if (!playerContainer) {
-            console.error('[CaptionOverlay] Video has no parent element!');
-            return;
-        }
-
-        // Ensure parent has positioning context
-        const parentPosition = getComputedStyle(playerContainer).position;
-        if (parentPosition === 'static') {
-            playerContainer.style.position = 'relative';
-            console.info('[CaptionOverlay] Set parent to position: relative');
-        }
-
-        console.info('[CaptionOverlay] Using video parent as container:', playerContainer.tagName, playerContainer.className);
-
-        // Get video dimensions and position relative to parent
-        const videoStyle = getComputedStyle(this.video);
-        const parentRect = playerContainer.getBoundingClientRect();
+        // Get video position relative to VIEWPORT (not parent)
+        // This is crucial for position: fixed
         const videoRect = this.video.getBoundingClientRect();
-
-        // Calculate video position within parent (in pixels, then convert to %)
-        const videoLeft = videoRect.left - parentRect.left;
-        const videoTop = videoRect.top - parentRect.top;
         const videoWidth = this.video.offsetWidth || videoRect.width;
         const videoHeight = this.video.offsetHeight || videoRect.height;
 
-        console.info('[CaptionOverlay] Video dimensions (relative to parent):');
+        console.info('[CaptionOverlay] Video dimensions (viewport-relative for fixed positioning):');
         console.info('  - Width:', videoWidth, 'px');
         console.info('  - Height:', videoHeight, 'px');
-        console.info('  - Left offset:', videoLeft, 'px');
-        console.info('  - Top offset:', videoTop, 'px');
+        console.info('  - Left:', videoRect.left, 'px');
+        console.info('  - Top:', videoRect.top, 'px');
 
         // Create overlay container that matches VIDEO dimensions exactly
         this.overlay = document.createElement('div');
@@ -333,12 +311,12 @@ class CustomCaptionOverlay {
             verticalAlignment = 'flex-end'; // bottom (default)
         }
 
-        // CRITICAL: Overlay matches VIDEO position and size EXACTLY
-        // IMPORTANT: Isolate overlay to prevent video freezing (TikTok, YouTube, etc.)
+        // CRITICAL: Use position: fixed to completely separate overlay from video
+        // This prevents overlay from interfering with video rendering pipeline
         this.overlay.style.cssText = `
-            position: absolute;
-            left: ${videoLeft}px;
-            top: ${videoTop}px;
+            position: fixed;
+            left: ${videoRect.left}px;
+            top: ${videoRect.top}px;
             width: ${videoWidth}px;
             height: ${videoHeight}px;
             z-index: 9999;
@@ -389,7 +367,10 @@ class CustomCaptionOverlay {
         `;
 
         this.overlay.appendChild(this.captionElement);
-        playerContainer.appendChild(this.overlay);
+
+        // CRITICAL: Append to document.body instead of video container
+        // This completely separates overlay from video rendering
+        document.body.appendChild(this.overlay);
 
         // CRITICAL: Update overlay position when video resizes or moves
         this.setupResizeObserver();
@@ -420,21 +401,19 @@ class CustomCaptionOverlay {
     /**
      * Update overlay position to match current video position
      * Called when video resizes, moves, or window resizes
+     * Uses viewport-relative positioning (position: fixed)
      */
     updateOverlayPosition() {
         if (!this.video || !this.overlay) return;
 
-        const parentRect = this.video.parentElement.getBoundingClientRect();
+        // Get video position relative to VIEWPORT (for position: fixed)
         const videoRect = this.video.getBoundingClientRect();
-
-        const videoLeft = videoRect.left - parentRect.left;
-        const videoTop = videoRect.top - parentRect.top;
         const videoWidth = this.video.offsetWidth || videoRect.width;
         const videoHeight = this.video.offsetHeight || videoRect.height;
 
-        // Update overlay position and size
-        this.overlay.style.left = `${videoLeft}px`;
-        this.overlay.style.top = `${videoTop}px`;
+        // Update overlay position and size (viewport-relative)
+        this.overlay.style.left = `${videoRect.left}px`;
+        this.overlay.style.top = `${videoRect.top}px`;
         this.overlay.style.width = `${videoWidth}px`;
         this.overlay.style.height = `${videoHeight}px`;
 
@@ -454,14 +433,14 @@ class CustomCaptionOverlay {
         this.boundForceUpdate = () => this.forceUpdate();
         this.boundHandleFullscreen = () => this.handleFullscreenChange();
 
-        // PRIMARY: timeupdate - fires during normal playback
+        // PRIMARY: timeupdate - fires during normal playback (sufficient for most cases)
         this.video.addEventListener('timeupdate', this.boundUpdateCaption);
 
         // CRITICAL: seeking events - fires when user seeks (scrubbing)
         this.video.addEventListener('seeking', this.boundForceUpdate);
         this.video.addEventListener('seeked', this.boundForceUpdate);
 
-        // IMPORTANT: play/pause events - ensure caption state is correct
+        // IMPORTANT: play/pause events - control RAF loop
         this.video.addEventListener('play', this.boundForceUpdate);
         this.video.addEventListener('pause', this.boundForceUpdate);
         this.video.addEventListener('playing', this.boundForceUpdate);
@@ -473,22 +452,20 @@ class CustomCaptionOverlay {
         this.video.addEventListener('loadeddata', this.boundForceUpdate);
         this.video.addEventListener('canplay', this.boundForceUpdate);
 
-        // FAILSAFE: Continuous polling interval (runs ALWAYS, not just when playing)
-        // This catches any edge cases where events don't fire
-        this.updateInterval = setInterval(() => {
-            if (this.video) {
-                this.updateCaption();
-            }
-        }, 50); // 50ms = 20fps polling for smooth updates
+        // REMOVED: Aggressive setInterval polling (was causing performance issues)
+        // Event listeners are sufficient for caption updates
 
-        // EXTRA FAILSAFE: requestAnimationFrame loop for maximum responsiveness
+        // OPTIMIZED RAF loop: Only runs when video is PLAYING (not paused)
+        // Limited to 10 FPS instead of 60 FPS to reduce GPU load
         const rafLoop = () => {
             if (!this.isTracking) return;
 
-            if (this.video && this.isVisible) {
+            // Only update if video is playing AND captions are visible
+            if (this.video && this.isVisible && !this.video.paused) {
                 const now = performance.now();
-                // Update at least every 16ms (60fps) when video is playing
-                if (now - this.lastUpdateTime > 16) {
+                // Update max every 100ms (10 FPS) instead of 16ms (60 FPS)
+                // This drastically reduces GPU load while still being smooth enough
+                if (now - this.lastUpdateTime > 100) {
                     this.updateCaption();
                     this.lastUpdateTime = now;
                 }
@@ -510,7 +487,7 @@ class CustomCaptionOverlay {
             resizeObserver.observe(playerContainer);
         }
 
-        console.info('[CaptionOverlay] ✓ Started ROBUST tracking with multiple failsafes');
+        console.info('[CaptionOverlay] ✓ Started OPTIMIZED tracking (10 FPS, plays only)');
     }
 
     /**
