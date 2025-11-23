@@ -612,13 +612,12 @@ class CustomCaptionOverlay {
                 if (subtitleButton) {
                     clearInterval(waitForButton);
 
-                    // Sync initial state with YouTube button
-                    const isYouTubeCaptionsOn = subtitleButton.getAttribute('aria-pressed') === 'true';
-                    this.isVisible = isYouTubeCaptionsOn;
+                    // IMPORTANT: Buttercup captions are ALWAYS visible by default
+                    // We do NOT sync with YouTube's subtitle button state initially
+                    // Users can toggle manually if they want captions off
+                    this.isVisible = true;
                     this.updateCustomButtonState();
-                    if (this.isVisible) {
-                        this.forceUpdate();
-                    }
+                    this.forceUpdate();
 
                     // Event Listener für Button-Klick
                     subtitleButton.addEventListener('click', () => {
