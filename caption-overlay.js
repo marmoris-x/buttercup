@@ -247,10 +247,40 @@ class CustomCaptionOverlay {
                     this.video = video;
                     clearInterval(checkVideo);
                     console.info('[CaptionOverlay] ✓ Video element found');
+
+                    // CRITICAL: Ensure video remains hardware-accelerated
+                    this.ensureVideoHardwareAcceleration();
+
                     resolve();
                 }
             }, 100);
         });
+    }
+
+    /**
+     * Ensure video element uses hardware acceleration
+     * This prevents video freezing when overlay is active
+     */
+    ensureVideoHardwareAcceleration() {
+        if (!this.video) return;
+
+        // Force GPU compositing layer for video
+        // This prevents the browser from disabling hardware acceleration
+        // when the overlay is positioned above it
+        const currentTransform = this.video.style.transform || '';
+
+        // Only add if not already present
+        if (!currentTransform.includes('translateZ')) {
+            this.video.style.transform = currentTransform + ' translateZ(0)';
+        }
+
+        // Hint to browser that this element will change
+        this.video.style.willChange = 'transform';
+
+        // Additional optimization
+        this.video.style.backfaceVisibility = 'hidden';
+
+        console.info('[CaptionOverlay] ✓ Video hardware acceleration ensured');
     }
 
     createOverlay() {
@@ -312,6 +342,7 @@ class CustomCaptionOverlay {
         }
 
         // CRITICAL: Overlay matches VIDEO position and size EXACTLY
+        // IMPORTANT: Use GPU acceleration to prevent video freezing
         this.overlay.style.cssText = `
             position: absolute;
             left: ${videoLeft}px;
@@ -327,6 +358,9 @@ class CustomCaptionOverlay {
             margin: 0;
             overflow: hidden;
             box-sizing: border-box;
+            transform: translateZ(0);
+            will-change: transform;
+            backface-visibility: hidden;
         `;
 
         // Create caption element
@@ -537,6 +571,9 @@ class CustomCaptionOverlay {
 
         // Set new video
         this.video = newVideo;
+
+        // CRITICAL: Ensure new video has hardware acceleration
+        this.ensureVideoHardwareAcceleration();
 
         // Re-attach event listeners
         this.video.addEventListener('timeupdate', this.boundUpdateCaption);
