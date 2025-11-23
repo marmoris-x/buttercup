@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html data-theme="cupcake" lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Buttercup - Saved Transcripts</title>
+    <link href="assets/css/daisyui-4.7.2.full.min.css" rel="stylesheet" type="text/css" />
+    <script src="assets/js/tailwindcss.3.4.1.js"></script>
+    <style type="text/css">
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .transcript-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .transcript-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .summary-content {
+            background: #f7f7f7;
+            border-left: 4px solid #667eea;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+        }
+
+        .chapter-item {
+            padding: 0.5rem;
+            margin: 0.25rem 0;
+            background: white;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .chapter-item:hover {
+            background: #e0e7ff;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .stats-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .header {
+            background: white;
+            border-radius: 12px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1 class="text-4xl font-bold mb-2">📚 Saved Transcripts</h1>
+            <p class="text-gray-600">Manage your Buttercup video transcripts and AI summaries</p>
+        </div>
+
+        <!-- Stats Card -->
+        <div class="stats-card">
+            <div class="grid grid-cols-3 gap-4 text-center">
+                <div>
+                    <div class="text-3xl font-bold text-primary" id="total-count">0</div>
+                    <div class="text-sm text-gray-600">Total Transcripts</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-secondary" id="with-summary-count">0</div>
+                    <div class="text-sm text-gray-600">With AI Summary</div>
+                </div>
+                <div>
+                    <div class="text-3xl font-bold text-accent" id="total-size">0 KB</div>
+                    <div class="text-sm text-gray-600">Storage Used</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transcripts List -->
+        <div id="transcripts-container">
+            <!-- Transcripts will be loaded here -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="empty-state hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-24 w-24 mx-auto mb-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <h2 class="text-2xl font-bold mb-2">No Transcripts Yet</h2>
+            <p class="text-gray-600 mb-4">Start transcribing videos to see them here!</p>
+            <button class="btn btn-primary" id="go-back-btn">Go Back to Extension</button>
+        </div>
+    </div>
+
+    <script src="assets/js/transcripts.js"></script>
+</body>
+
+</html>
