@@ -260,27 +260,19 @@ class CustomCaptionOverlay {
     /**
      * Ensure video element uses hardware acceleration
      * This prevents video freezing when overlay is active
+     *
+     * IMPORTANT: We DO NOT modify the video element directly anymore
+     * as this can conflict with platform-specific optimizations (TikTok, etc.)
+     * Instead, we rely on overlay isolation via CSS containment
      */
     ensureVideoHardwareAcceleration() {
         if (!this.video) return;
 
-        // Force GPU compositing layer for video
-        // This prevents the browser from disabling hardware acceleration
-        // when the overlay is positioned above it
-        const currentTransform = this.video.style.transform || '';
+        // REMOVED: Direct video manipulation
+        // This was causing conflicts on TikTok and other platforms
+        // The overlay isolation (via contain and isolation) is sufficient
 
-        // Only add if not already present
-        if (!currentTransform.includes('translateZ')) {
-            this.video.style.transform = currentTransform + ' translateZ(0)';
-        }
-
-        // Hint to browser that this element will change
-        this.video.style.willChange = 'transform';
-
-        // Additional optimization
-        this.video.style.backfaceVisibility = 'hidden';
-
-        console.info('[CaptionOverlay] ✓ Video hardware acceleration ensured');
+        console.info('[CaptionOverlay] ✓ Video element unchanged (safe for all platforms)');
     }
 
     createOverlay() {
@@ -342,7 +334,7 @@ class CustomCaptionOverlay {
         }
 
         // CRITICAL: Overlay matches VIDEO position and size EXACTLY
-        // IMPORTANT: Use GPU acceleration to prevent video freezing
+        // IMPORTANT: Isolate overlay to prevent video freezing (TikTok, YouTube, etc.)
         this.overlay.style.cssText = `
             position: absolute;
             left: ${videoLeft}px;
@@ -361,6 +353,8 @@ class CustomCaptionOverlay {
             transform: translateZ(0);
             will-change: transform;
             backface-visibility: hidden;
+            isolation: isolate;
+            contain: layout style paint;
         `;
 
         // Create caption element
