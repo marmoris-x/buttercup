@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html data-theme="cupcake" lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Buttercup - Saved Transcripts</title>
+    <link href="assets/css/daisyui-4.7.2.full.min.css" rel="stylesheet" type="text/css" />
+    <script src="assets/js/tailwindcss.3.4.1.js"></script>
+    <style type="text/css">
+        :root {
+            --bg-gradient-start: #667eea;
+            --bg-gradient-end: #764ba2;
+            --card-bg: white;
+            --text-primary: #1f2937;
+            --text-secondary: #6b7280;
+            --border-color: #e5e7eb;
+            --hover-bg: #f3f4f6;
+        }
+
+        [data-theme="dark"] {
+            --bg-gradient-start: #1f2937;
+            --bg-gradient-end: #111827;
+            --card-bg: #1f2937;
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --border-color: #374151;
+            --hover-bg: #374151;
+        }
+
+        body {
+            min-height: 100vh;
+            background: linear-gradient(135deg, var(--bg-gradient-start) 0%, var(--bg-gradient-end) 100%);
+            color: var(--text-primary);
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .transcript-card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1rem;
+            border: 1px solid var(--border-color);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .transcript-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .summary-content {
+            background: var(--hover-bg);
+            border-left: 3px solid #6366f1;
+            padding: 1rem;
+            border-radius: 4px;
+            margin-top: 1rem;
+        }
+
+        .chapter-item {
+            padding: 0.5rem;
+            margin: 0.25rem 0;
+            background: var(--hover-bg);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .chapter-item:hover {
+            background: var(--border-color);
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            background: var(--card-bg);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .stats-card {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .header {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .filter-bar {
+            background: var(--card-bg);
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .thumbnail {
+            width: 120px;
+            height: 68px;
+            object-fit: cover;
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+        }
+
+        .thumbnail-placeholder {
+            width: 120px;
+            height: 68px;
+            background: var(--hover-bg);
+            border-radius: 4px;
+            border: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--text-secondary);
+            font-size: 0.75rem;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div>
+                <h1 class="text-3xl font-bold mb-1">Saved Transcripts</h1>
+                <p class="text-sm" style="color: var(--text-secondary)">Manage your Buttercup transcripts and summaries</p>
+            </div>
+            <button class="btn btn-sm btn-outline" id="toggle-dark-mode">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+                </svg>
+                Dark Mode
+            </button>
+        </div>
+
+        <!-- Stats Card -->
+        <div class="stats-card">
+            <div class="grid grid-cols-5 gap-3 text-center">
+                <div>
+                    <div class="text-2xl font-bold text-primary" id="total-count">0</div>
+                    <div class="text-xs" style="color: var(--text-secondary)">All</div>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-info" id="upload-count">0</div>
+                    <div class="text-xs" style="color: var(--text-secondary)">Uploads</div>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-primary" id="video-count">0</div>
+                    <div class="text-xs" style="color: var(--text-secondary)">Videos</div>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-success" id="summary-count">0</div>
+                    <div class="text-xs" style="color: var(--text-secondary)">Summary</div>
+                </div>
+                <div>
+                    <div class="text-2xl font-bold text-accent" id="total-duration">0h 0m</div>
+                    <div class="text-xs" style="color: var(--text-secondary)">Duration</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bulk Actions Toolbar (Hidden by default) -->
+        <div id="bulk-toolbar" class="filter-bar hidden">
+            <div class="flex justify-between items-center">
+                <div class="flex gap-3 items-center">
+                    <span class="font-bold" id="selection-count">0 selected</span>
+                    <button class="btn btn-xs btn-outline" id="select-all-btn">Select All</button>
+                    <button class="btn btn-xs btn-outline" id="deselect-all-btn">Deselect All</button>
+                </div>
+                <div class="flex gap-2">
+                    <button class="btn btn-xs btn-primary" id="bulk-export-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                        </svg>
+                        Export ZIP
+                    </button>
+                    <button class="btn btn-xs btn-error" id="bulk-delete-btn">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Filter Bar -->
+        <div class="filter-bar">
+            <!-- Row 1: Folder & Source -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <!-- Folder Filter -->
+                <div>
+                    <label class="text-xs font-bold mb-1 block" style="color: var(--text-secondary)">
+                        Folder
+                        <button class="btn btn-xs btn-ghost ml-1" id="manage-folders-btn" title="Manage Folders">⚙️</button>
+                    </label>
+                    <select class="select select-bordered select-sm w-full" id="folder-filter">
+                        <option value="all">All Folders</option>
+                        <option value="none">No Folder</option>
+                        <!-- Folders will be loaded dynamically -->
+                    </select>
+                </div>
+
+                <!-- Source Filter -->
+                <div>
+                    <label class="text-xs font-bold mb-1 block" style="color: var(--text-secondary)">Source</label>
+                    <div class="btn-group btn-group-sm w-full grid grid-cols-4">
+                        <button class="btn btn-sm active" data-filter-source="all">All</button>
+                        <button class="btn btn-sm" data-filter-source="batch">Batch</button>
+                        <button class="btn btn-sm" data-filter-source="upload">Upload</button>
+                        <button class="btn btn-sm" data-filter-source="web">Web</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Row 2: Favorites, Summary & Sort -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                <!-- Favorites Filter -->
+                <div>
+                    <label class="text-xs font-bold mb-1 block" style="color: var(--text-secondary)">Favorites</label>
+                    <div class="btn-group btn-group-sm w-full">
+                        <button class="btn btn-sm flex-1 active" data-filter-favorites="all">All</button>
+                        <button class="btn btn-sm flex-1" data-filter-favorites="favorites">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3 inline" fill="currentColor" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                            </svg>
+                            ★
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Summary Filter -->
+                <div>
+                    <label class="text-xs font-bold mb-1 block" style="color: var(--text-secondary)">Summary</label>
+                    <div class="btn-group btn-group-sm w-full">
+                        <button class="btn btn-sm flex-1 active" data-filter-summary="all">All</button>
+                        <button class="btn btn-sm flex-1" data-filter-summary="with">✓</button>
+                        <button class="btn btn-sm flex-1" data-filter-summary="without">✗</button>
+                    </div>
+                </div>
+
+                <!-- Sort -->
+                <div>
+                    <label class="text-xs font-bold mb-1 block" style="color: var(--text-secondary)">Sort</label>
+                    <select class="select select-bordered select-sm w-full" id="sort-select">
+                        <option value="newest">Newest</option>
+                        <option value="oldest">Oldest</option>
+                        <option value="title">A-Z</option>
+                        <option value="longest">Longest</option>
+                        <option value="shortest">Shortest</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Row 3: Search (full width) -->
+            <div>
+                <label class="text-xs font-bold mb-1 block" style="color: var(--text-secondary)">Search (Title / Tags / Domain)</label>
+                <div class="flex gap-2">
+                    <input type="text" placeholder="Search titles, tags, or domains..." class="input input-bordered input-sm flex-1" id="search-input" />
+                    <div class="btn-group btn-group-sm">
+                        <button class="btn btn-sm active" data-search-mode="title" title="Search in titles, tags & domains">T</button>
+                        <button class="btn btn-sm" data-search-mode="content" title="Search in transcripts">C</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Transcripts List -->
+        <div id="transcripts-container">
+            <!-- Transcripts will be loaded here -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="empty-state" class="empty-state hidden">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-16 w-16 mx-auto mb-4" style="color: var(--text-secondary)" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+            <h2 class="text-xl font-bold mb-2">No Transcripts Found</h2>
+            <p class="mb-4" style="color: var(--text-secondary)">Try adjusting your filters or start transcribing videos!</p>
+            <button class="btn btn-primary btn-sm" id="go-back-btn">Go Back to Extension</button>
+        </div>
+
+        <!-- Folder Management Modal -->
+        <dialog id="folder-modal" class="modal">
+            <div class="modal-box">
+                <h3 class="font-bold text-lg mb-4">Manage Folders</h3>
+
+                <!-- Create New Folder -->
+                <div class="form-control mb-4">
+                    <label class="label">
+                        <span class="label-text">Create New Folder</span>
+                    </label>
+                    <div class="flex gap-2">
+                        <input type="text" id="new-folder-input" placeholder="Folder name..." class="input input-bordered input-sm flex-1" />
+                        <button class="btn btn-sm btn-primary" id="create-folder-btn">Create</button>
+                    </div>
+                </div>
+
+                <!-- Existing Folders List -->
+                <div class="form-control">
+                    <label class="label">
+                        <span class="label-text">Existing Folders</span>
+                    </label>
+                    <div id="folders-list" class="space-y-2 max-h-60 overflow-y-auto">
+                        <!-- Folders will be loaded here -->
+                    </div>
+                </div>
+
+                <div class="modal-action">
+                    <button class="btn btn-sm" id="close-folder-modal-btn">Close</button>
+                </div>
+            </div>
+            <form method="dialog" class="modal-backdrop">
+                <button>close</button>
+            </form>
+        </dialog>
+    </div>
+
+    <script src="assets/js/transcripts.js"></script>
+</body>
+
+</html>
