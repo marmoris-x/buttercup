@@ -189,24 +189,34 @@ class LogViewer {
             });
 
             logLevelSetting.addEventListener('change', (e) => {
-                chrome.storage.sync.set({ buttercup_log_level: e.target.value });
+                const newLevel = e.target.value;
 
-                // Notify content script to update logger
+                // Save to storage
+                chrome.storage.sync.set({ buttercup_log_level: newLevel });
+
+                // Notify page context to update logger via content script bridge
                 chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
                     if (tabs[0]) {
                         chrome.scripting.executeScript({
                             target: { tabId: tabs[0].id },
                             func: (level) => {
-                                if (window.buttercupLogger) {
-                                    window.buttercupLogger.setLevel(level);
+                                // Call the bridge function in content script
+                                // which will forward the message to page context
+                                if (typeof window.setPageLogLevel === 'function') {
+                                    window.setPageLogLevel(level);
+                                    console.log(`[LogViewer] ✅ Log level change sent to page: ${level}`);
+                                } else {
+                                    console.warn('[LogViewer] ⚠️ setPageLogLevel bridge not found');
                                 }
                             },
-                            args: [e.target.value]
+                            args: [newLevel]
+                        }).catch(err => {
+                            console.error('[LogViewer] Failed to set log level:', err);
                         });
                     }
                 });
 
-                this.showAlert(`Log level set to ${e.target.value}`, 'success');
+                this.showAlert(`Log level set to ${newLevel}`, 'success');
             });
         }
     }

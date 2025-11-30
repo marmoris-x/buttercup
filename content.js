@@ -130,6 +130,27 @@ scriptsInLoadOrder.reverse().forEach(scriptPath => {
 })();
 
 
+// ============================================================================
+// LOG LEVEL CONTROL BRIDGE
+// ============================================================================
+// Bridge to forward log level changes from popup to page context
+
+/**
+ * Helper function to set log level in page context
+ * Can be called from popup via chrome.scripting.executeScript
+ */
+window.setPageLogLevel = function(level) {
+    // Send message to page context to update logger
+    window.postMessage({
+        type: 'BUTTERCUP_LOG_LEVEL_CHANGE',
+        source: 'buttercup-content-script',
+        level: level
+    }, '*');
+
+    console.log(`[ContentScript] 📝 Forwarding log level change to page context: ${level}`);
+};
+
+
 // Initialize default settings if not set
 // Batch all settings checks into a single operation for better performance
 // Safety check for extension context

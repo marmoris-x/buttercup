@@ -89,15 +89,23 @@ class ButtercupLogger {
      */
     setLevel(level) {
         if (this.LOG_LEVELS[level]) {
+            const oldLevel = this.currentLevel.label;
             this.currentLevel = this.LOG_LEVELS[level];
 
+            console.log(`[Logger] 📝 Log level changed: ${oldLevel} → ${level}`);
+
+            // Save to chrome.storage if available (extension context)
             if (typeof chrome !== 'undefined' && chrome.storage && chrome.storage.sync) {
                 chrome.storage.sync.set({ buttercup_log_level: level }, () => {
                     if (chrome.runtime.lastError) {
                         console.error('[Logger] Failed to save log level:', chrome.runtime.lastError);
+                    } else {
+                        console.log(`[Logger] ✅ Log level saved to storage: ${level}`);
                     }
                 });
             }
+        } else {
+            console.warn(`[Logger] ⚠️ Invalid log level: ${level}`);
         }
     }
 
@@ -578,6 +586,24 @@ if (typeof window !== 'undefined') {
     setTimeout(() => {
         window.buttercupLogger.interceptConsole();
     }, 100);
+
+    // Listen for log level changes from content script
+    window.addEventListener('message', (event) => {
+        // Security: Only accept messages from same origin
+        if (event.source !== window) {
+            return;
+        }
+
+        // Handle log level changes
+        if (event.data &&
+            event.data.type === 'BUTTERCUP_LOG_LEVEL_CHANGE' &&
+            event.data.source === 'buttercup-content-script' &&
+            event.data.level) {
+
+            console.log(`[Logger] 📝 Received log level change request: ${event.data.level}`);
+            window.buttercupLogger.setLevel(event.data.level);
+        }
+    }, false);
 
     console.log('[Buttercup] 📝 Advanced logging system initialized');
 }
