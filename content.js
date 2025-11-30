@@ -33,6 +33,103 @@ scriptsInLoadOrder.reverse().forEach(scriptPath => {
 });
 
 
+// ============================================================================
+// LOG STORAGE HANDLER (Message Bridge)
+// ============================================================================
+// This handler receives log messages from page context (via window.postMessage)
+// and stores them in chrome.storage.local with batch processing for performance
+
+(function() {
+    const LOG_BATCH_INTERVAL = 1000; // Batch logs every 1 second
+    const MAX_LOGS = 500; // Maximum logs to keep in storage
+    let logBatch = [];
+    let batchTimer = null;
+    let isSaving = false;
+
+    /**
+     * Save batched logs to chrome.storage.local
+     */
+    async function saveBatchedLogs() {
+        if (logBatch.length === 0 || isSaving) {
+            return;
+        }
+
+        isSaving = true;
+        const logsToSave = [...logBatch];
+        logBatch = []; // Clear batch immediately
+
+        try {
+            // Get existing logs
+            const result = await chrome.storage.local.get(['buttercup_logs']);
+            let logs = result.buttercup_logs || [];
+
+            // Add new logs
+            logs.push(...logsToSave);
+
+            // Rotate if exceeding max
+            if (logs.length > MAX_LOGS) {
+                logs = logs.slice(-MAX_LOGS);
+            }
+
+            // Save back to storage
+            await chrome.storage.local.set({ buttercup_logs: logs });
+
+            console.log(`[ContentScript] 📝 Saved ${logsToSave.length} logs (total: ${logs.length})`);
+        } catch (error) {
+            console.error('[ContentScript] ❌ Failed to save logs:', error);
+            // Re-add logs to batch for retry
+            logBatch.unshift(...logsToSave);
+        } finally {
+            isSaving = false;
+        }
+    }
+
+    /**
+     * Add log to batch and schedule save
+     */
+    function addLogToBatch(logEntry) {
+        logBatch.push(logEntry);
+
+        // Schedule batch save if not already scheduled
+        if (!batchTimer) {
+            batchTimer = setTimeout(() => {
+                batchTimer = null;
+                saveBatchedLogs();
+            }, LOG_BATCH_INTERVAL);
+        }
+    }
+
+    /**
+     * Listen for log messages from page context
+     */
+    window.addEventListener('message', (event) => {
+        // Security: Only accept messages from same origin
+        if (event.source !== window) {
+            return;
+        }
+
+        // Filter for Buttercup log messages
+        if (event.data &&
+            event.data.type === 'BUTTERCUP_LOG_SAVE' &&
+            event.data.source === 'buttercup-logger' &&
+            event.data.log) {
+
+            addLogToBatch(event.data.log);
+        }
+    }, false);
+
+    // Save any remaining logs when page unloads
+    window.addEventListener('beforeunload', () => {
+        if (logBatch.length > 0) {
+            // Force immediate save (synchronous)
+            saveBatchedLogs();
+        }
+    });
+
+    console.log('[ContentScript] 🎯 Log storage handler initialized (batch interval: 1s, max logs: 500)');
+})();
+
+
 // Initialize default settings if not set
 // Batch all settings checks into a single operation for better performance
 // Safety check for extension context

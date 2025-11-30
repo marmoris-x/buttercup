@@ -31,39 +31,55 @@ class ButtercupLogger {
     }
 
     async init() {
-        // Check if we're in the right context
-        this.isAvailable = typeof chrome !== 'undefined' && chrome.storage && chrome.storage.local;
+        // Detect context: Extension (has chrome.storage) vs Page (no chrome.storage)
+        this.isExtensionContext = typeof chrome !== 'undefined' &&
+                                  chrome.storage &&
+                                  chrome.storage.local;
 
-        if (!this.isAvailable) {
-            // Silently disable logging if chrome.storage not available
-            // This is normal in contexts like popups or before extension fully loads
-            return;
-        }
+        this.isPageContext = !this.isExtensionContext && typeof window !== 'undefined';
 
-        // Load log level from settings
-        try {
-            if (chrome.storage && chrome.storage.sync) {
-                chrome.storage.sync.get(['buttercup_log_level'], (result) => {
-                    if (chrome.runtime.lastError) {
-                        console.error('[Logger] Failed to load log level:', chrome.runtime.lastError);
-                        return;
-                    }
+        if (this.isPageContext) {
+            // Page context: Use window.postMessage to send logs to content script
+            this.storageMethod = 'postMessage';
+            console.log('[Logger] 📝 Running in PAGE context - using postMessage bridge');
 
-                    if (result.buttercup_log_level) {
-                        this.currentLevel = this.LOG_LEVELS[result.buttercup_log_level] || this.LOG_LEVELS.INFO;
-                    }
+            // Simple init log in page context
+            this.info('GENERAL', 'Logger initialized in page context (using message bridge)')
+                .catch(() => {/* silent */});
 
-                    // Write a test log to verify functionality
-                    this.info('GENERAL', 'Logger initialized successfully')
+        } else if (this.isExtensionContext) {
+            // Extension context: Direct chrome.storage access
+            this.storageMethod = 'chromeStorage';
+            console.log('[Logger] 📝 Running in EXTENSION context - using chrome.storage directly');
+
+            // Load log level from settings
+            try {
+                if (chrome.storage && chrome.storage.sync) {
+                    chrome.storage.sync.get(['buttercup_log_level'], (result) => {
+                        if (chrome.runtime.lastError) {
+                            console.error('[Logger] Failed to load log level:', chrome.runtime.lastError);
+                            return;
+                        }
+
+                        if (result.buttercup_log_level) {
+                            this.currentLevel = this.LOG_LEVELS[result.buttercup_log_level] || this.LOG_LEVELS.INFO;
+                        }
+
+                        // Write a test log to verify functionality
+                        this.info('GENERAL', 'Logger initialized in extension context')
+                            .catch(err => console.error('[Logger] Failed to write init log:', err));
+                    });
+                } else {
+                    this.info('GENERAL', 'Logger initialized in extension context')
                         .catch(err => console.error('[Logger] Failed to write init log:', err));
-                });
-            } else {
-                // No sync storage available, just log init
-                this.info('GENERAL', 'Logger initialized successfully')
-                    .catch(err => console.error('[Logger] Failed to write init log:', err));
+                }
+            } catch (error) {
+                console.error('[Logger] Failed to load log level:', error);
             }
-        } catch (error) {
-            console.error('[Logger] Failed to load log level:', error);
+        } else {
+            // Unknown context - disable logging
+            this.storageMethod = 'none';
+            console.warn('[Logger] ⚠️ Running in UNKNOWN context - logging disabled');
         }
     }
 
@@ -111,16 +127,44 @@ class ButtercupLogger {
 
     /**
      * Save log entry to storage
+     * Routes to appropriate storage method based on context
      */
     async saveLog(entry) {
-        // Skip if storage not available
-        if (!this.isAvailable) {
-            return;
+        if (this.storageMethod === 'postMessage') {
+            // Page context: Send via window.postMessage to content script
+            this.saveLogViaPostMessage(entry);
+        } else if (this.storageMethod === 'chromeStorage') {
+            // Extension context: Direct chrome.storage access
+            await this.saveLogViaChromeStorage(entry);
         }
+        // 'none' context: silently skip logging
+    }
 
+    /**
+     * Save log via window.postMessage (Page Context)
+     * Sends log to content script which has chrome.storage access
+     */
+    saveLogViaPostMessage(entry) {
+        try {
+            window.postMessage({
+                type: 'BUTTERCUP_LOG_SAVE',
+                source: 'buttercup-logger',
+                log: entry
+            }, '*');
+        } catch (error) {
+            // Silent failure - don't spam console
+            // This can happen if window is not available or postMessage fails
+        }
+    }
+
+    /**
+     * Save log via chrome.storage (Extension Context)
+     * Direct storage access when running in extension context
+     */
+    async saveLogViaChromeStorage(entry) {
         // Double-check chrome.storage exists before each call (can become undefined)
         if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
-            this.isAvailable = false;
+            this.storageMethod = 'none';
             return;
         }
 
@@ -155,7 +199,7 @@ class ButtercupLogger {
             });
         } catch (error) {
             // Silent failure - don't spam console
-            this.isAvailable = false;
+            this.storageMethod = 'none';
         }
     }
 
@@ -267,15 +311,18 @@ class ButtercupLogger {
 
     /**
      * Get all logs from storage
+     * Note: Only works in extension context (popup, content script)
+     * Returns empty array in page context
      */
     async getLogs(filters = {}) {
-        if (!this.isAvailable) {
+        // Only works in extension context
+        if (this.storageMethod !== 'chromeStorage') {
+            console.warn('[Logger] getLogs() only works in extension context');
             return [];
         }
 
         // Double-check chrome.storage exists
         if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
-            this.isAvailable = false;
             return [];
         }
 
@@ -314,22 +361,24 @@ class ButtercupLogger {
                 });
             });
         } catch (error) {
-            this.isAvailable = false;
             return [];
         }
     }
 
     /**
      * Clear all logs from storage
+     * Note: Only works in extension context (popup, content script)
+     * Returns false in page context
      */
     async clearLogs() {
-        if (!this.isAvailable) {
+        // Only works in extension context
+        if (this.storageMethod !== 'chromeStorage') {
+            console.warn('[Logger] clearLogs() only works in extension context');
             return false;
         }
 
         // Double-check chrome.storage exists
         if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
-            this.isAvailable = false;
             return false;
         }
 
@@ -346,7 +395,6 @@ class ButtercupLogger {
                 });
             });
         } catch (error) {
-            this.isAvailable = false;
             return false;
         }
     }
@@ -432,10 +480,12 @@ class ButtercupLogger {
 
     /**
      * Intercept console methods to capture all Buttercup logs
+     * Works in both page and extension contexts
      */
     interceptConsole() {
-        // Skip if not available (silently)
-        if (!this.isAvailable) {
+        // Skip if storage method is 'none'
+        if (this.storageMethod === 'none') {
+            console.warn('[Logger] Console interception disabled (unknown context)');
             return;
         }
 
