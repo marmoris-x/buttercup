@@ -723,5 +723,123 @@ def transcribe_video():
                 logging.warning(f"[TranscribeVideo] Could not remove converted audio: {e}")
 
 
+@app.route('/extract-playlist', methods=['GET'])
+def extract_playlist():
+    """Extract all video URLs from a playlist
+
+    Supports:
+    - YouTube playlists
+    - Vimeo showcases/channels
+    - Other platforms supported by yt-dlp
+
+    Query parameters:
+        url: Playlist URL
+
+    Returns:
+        {
+            "success": true,
+            "playlist_title": "Playlist Title",
+            "playlist_url": "https://...",
+            "video_count": 10,
+            "videos": [
+                {
+                    "url": "https://www.youtube.com/watch?v=...",
+                    "title": "Video Title",
+                    "duration": 123,
+                    "id": "video_id"
+                },
+                ...
+            ]
+        }
+    """
+    playlist_url = request.args.get('url')
+
+    logging.info(f"[ExtractPlaylist] Received request for playlist: {playlist_url}")
+
+    if not playlist_url:
+        logging.error("[ExtractPlaylist] URL parameter is missing")
+        return jsonify({"error": "URL parameter is required"}), 400
+
+    try:
+        # Configure yt-dlp to extract playlist info without downloading
+        ydl_opts = {
+            'extract_flat': 'in_playlist',  # Only extract video URLs, don't download
+            'quiet': False,
+            'no_warnings': False,
+            'ignoreerrors': True,  # Continue on errors
+        }
+
+        logging.info(f"[ExtractPlaylist] Extracting playlist info for: {playlist_url}")
+
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(playlist_url, download=False)
+
+            if not info:
+                logging.error("[ExtractPlaylist] Failed to extract playlist info")
+                return jsonify({"error": "Failed to extract playlist information"}), 500
+
+            # Check if this is a playlist
+            if 'entries' not in info:
+                logging.error("[ExtractPlaylist] URL is not a playlist")
+                return jsonify({"error": "URL does not appear to be a playlist"}), 400
+
+            # Extract video information
+            videos = []
+            for entry in info['entries']:
+                if entry is None:
+                    continue  # Skip unavailable videos
+
+                try:
+                    # Build video URL
+                    video_id = entry.get('id')
+                    video_url = entry.get('url') or entry.get('webpage_url')
+
+                    # If no direct URL, construct YouTube URL from ID
+                    if not video_url and video_id:
+                        # Determine platform
+                        extractor = info.get('extractor', '').lower()
+                        if 'youtube' in extractor:
+                            video_url = f"https://www.youtube.com/watch?v={video_id}"
+                        else:
+                            # For other platforms, try to use the original URL format
+                            video_url = entry.get('ie_key', video_id)
+
+                    if not video_url:
+                        continue
+
+                    video_info = {
+                        'url': video_url,
+                        'title': entry.get('title', 'Unknown Title'),
+                        'duration': entry.get('duration', 0),
+                        'id': video_id
+                    }
+
+                    videos.append(video_info)
+
+                except Exception as e:
+                    logging.warning(f"[ExtractPlaylist] Error processing video entry: {e}")
+                    continue
+
+            logging.info(f"[ExtractPlaylist] Successfully extracted {len(videos)} videos from playlist")
+
+            result = {
+                'success': True,
+                'playlist_title': info.get('title', 'Unknown Playlist'),
+                'playlist_url': playlist_url,
+                'video_count': len(videos),
+                'videos': videos,
+                'platform': info.get('extractor', 'unknown')
+            }
+
+            return jsonify(result), 200
+
+    except yt_dlp.utils.DownloadError as e:
+        logging.error(f"[ExtractPlaylist] yt-dlp download error: {e}")
+        return jsonify({"error": f"Failed to extract playlist: {str(e)}"}), 500
+    except Exception as e:
+        logging.error(f"[ExtractPlaylist] Unexpected error: {e}", exc_info=True)
+        return jsonify({"error": f"An error occurred: {str(e)}"}), 500
+
+
 if __name__ == '__main__':
     app.run(host='127.0.0.1', port=8675)

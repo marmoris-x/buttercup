@@ -48,9 +48,10 @@ class BatchUI {
                 <div class="form-control">
                     <label class="label">
                         <span class="label-text font-semibold">Add Videos to Batch</span>
+                        <span class="label-text-alt text-success">✨ Playlists supported!</span>
                     </label>
                     <textarea id="batch-urls" class="textarea textarea-bordered h-20 text-xs"
-                              placeholder="Paste video URLs (one per line)&#10;YouTube, Vimeo, Dailymotion, Twitter, TikTok...&#10;https://www.youtube.com/watch?v=...&#10;https://vimeo.com/123456789"></textarea>
+                              placeholder="Paste video or playlist URLs (one per line)&#10;&#10;Videos: YouTube, Vimeo, Dailymotion, Twitter, TikTok...&#10;Playlists: YouTube playlists, Vimeo showcases...&#10;&#10;https://www.youtube.com/watch?v=...&#10;https://www.youtube.com/playlist?list=..."></textarea>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2">
@@ -198,6 +199,41 @@ class BatchUI {
             return;
         }
 
+        // Check for playlist URLs
+        const playlistUrls = urls.filter(url => this.isPlaylistUrl(url));
+        const videoUrls = urls.filter(url => !this.isPlaylistUrl(url));
+
+        // Extract videos from playlists
+        const allVideoUrls = [...videoUrls];
+        if (playlistUrls.length > 0) {
+            this.showAlert(`Extracting ${playlistUrls.length} playlist(s)...`, 'info');
+
+            for (const playlistUrl of playlistUrls) {
+                try {
+                    const playlist = await this.extractPlaylistVideos(playlistUrl);
+                    console.log(`[BatchUI] ✓ Extracted ${playlist.videoCount} videos from "${playlist.title}"`);
+
+                    // Add all videos from playlist
+                    for (const video of playlist.videos) {
+                        allVideoUrls.push(video.url);
+                    }
+
+                    this.showAlert(`✓ Extracted ${playlist.videoCount} videos from "${playlist.title}"`, 'success');
+                } catch (error) {
+                    console.error('[BatchUI] Failed to extract playlist:', error);
+                    this.showAlert(`Failed to extract playlist: ${error.message}`, 'error');
+                }
+            }
+        }
+
+        if (allVideoUrls.length === 0) {
+            this.showAlert('No valid video URLs found', 'warning');
+            return;
+        }
+
+        console.log(`[BatchUI] Total videos to add: ${allVideoUrls.length} (${videoUrls.length} direct + ${allVideoUrls.length - videoUrls.length} from playlists)`);
+
+
         // Load translation settings from sync storage
         const translationSettings = await new Promise((resolve) => {
             chrome.storage.sync.get([
@@ -227,7 +263,7 @@ class BatchUI {
 
         // Extract video IDs directly in popup context
         const videos = [];
-        for (const url of urls) {
+        for (const url of allVideoUrls) {
             const videoId = this.extractVideoId(url);
             if (videoId) {
                 // Fetch video title immediately (popup context has better CORS support)
@@ -314,6 +350,60 @@ class BatchUI {
             await this.loadBatchState();
         } else {
             this.showAlert('All videos already in queue', 'warning');
+        }
+    }
+
+    // Check if URL is a playlist
+    isPlaylistUrl(url) {
+        // YouTube playlist
+        if (url.includes('youtube.com/playlist?list=') || url.includes('list=')) {
+            return true;
+        }
+
+        // Vimeo showcase/channel
+        if (url.match(/vimeo\.com\/(?:showcase|channels)\//)) {
+            return true;
+        }
+
+        // Dailymotion playlist
+        if (url.includes('dailymotion.com/playlist/')) {
+            return true;
+        }
+
+        return false;
+    }
+
+    // Extract all videos from a playlist
+    async extractPlaylistVideos(playlistUrl) {
+        try {
+            console.log('[BatchUI] Extracting playlist:', playlistUrl);
+
+            const serverUrl = 'http://127.0.0.1:8675';
+            const response = await fetch(`${serverUrl}/extract-playlist?url=${encodeURIComponent(playlistUrl)}`);
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.error || 'Failed to extract playlist');
+            }
+
+            const data = await response.json();
+            console.log('[BatchUI] ✓ Playlist extracted:', data);
+
+            return {
+                title: data.playlist_title,
+                platform: data.platform,
+                videoCount: data.video_count,
+                videos: data.videos.map(v => ({
+                    url: v.url,
+                    title: v.title,
+                    duration: v.duration,
+                    videoId: v.id
+                }))
+            };
+
+        } catch (error) {
+            console.error('[BatchUI] Playlist extraction failed:', error);
+            throw error;
         }
     }
 
