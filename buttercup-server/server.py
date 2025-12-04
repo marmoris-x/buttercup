@@ -771,67 +771,86 @@ def extract_playlist():
 
         logging.info(f"[ExtractPlaylist] Extracting playlist info for: {playlist_url}")
 
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(playlist_url, download=False)
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(playlist_url, download=False)
 
-            if not info:
-                logging.error("[ExtractPlaylist] Failed to extract playlist info")
-                return jsonify({"error": "Failed to extract playlist information"}), 500
+                if not info:
+                    logging.error("[ExtractPlaylist] Failed to extract playlist info - yt-dlp returned None")
+                    return jsonify({"error": "Failed to extract playlist information"}), 500
 
-            # Check if this is a playlist
-            if 'entries' not in info:
-                logging.error("[ExtractPlaylist] URL is not a playlist")
-                return jsonify({"error": "URL does not appear to be a playlist"}), 400
+                logging.info(f"[ExtractPlaylist] Got info, checking for entries...")
+                logging.info(f"[ExtractPlaylist] Info keys: {list(info.keys())}")
 
-            # Extract video information
-            videos = []
-            for entry in info['entries']:
-                if entry is None:
-                    continue  # Skip unavailable videos
+                # Check if this is a playlist
+                if 'entries' not in info:
+                    logging.error(f"[ExtractPlaylist] URL is not a playlist - no 'entries' key found")
+                    logging.error(f"[ExtractPlaylist] Available keys: {list(info.keys())}")
+                    return jsonify({"error": "URL does not appear to be a playlist"}), 400
 
-                try:
-                    # Build video URL
-                    video_id = entry.get('id')
-                    video_url = entry.get('url') or entry.get('webpage_url')
+                entries_count = len(info['entries']) if info['entries'] else 0
+                logging.info(f"[ExtractPlaylist] Found {entries_count} entries in playlist")
 
-                    # If no direct URL, construct YouTube URL from ID
-                    if not video_url and video_id:
-                        # Determine platform
-                        extractor = info.get('extractor', '').lower()
-                        if 'youtube' in extractor:
-                            video_url = f"https://www.youtube.com/watch?v={video_id}"
-                        else:
-                            # For other platforms, try to use the original URL format
-                            video_url = entry.get('ie_key', video_id)
+                # Extract video information
+                videos = []
+                for i, entry in enumerate(info['entries']):
+                    if entry is None:
+                        logging.warning(f"[ExtractPlaylist] Entry {i} is None, skipping")
+                        continue  # Skip unavailable videos
 
-                    if not video_url:
+                    try:
+                        # Build video URL
+                        video_id = entry.get('id')
+                        video_url = entry.get('url') or entry.get('webpage_url')
+
+                        logging.debug(f"[ExtractPlaylist] Processing entry {i}: id={video_id}, url={video_url}")
+
+                        # If no direct URL, construct YouTube URL from ID
+                        if not video_url and video_id:
+                            # Determine platform
+                            extractor = info.get('extractor', '').lower()
+                            if 'youtube' in extractor:
+                                video_url = f"https://www.youtube.com/watch?v={video_id}"
+                                logging.debug(f"[ExtractPlaylist] Constructed YouTube URL: {video_url}")
+                            else:
+                                # For other platforms, try to use the original URL format
+                                video_url = entry.get('ie_key', video_id)
+                                logging.debug(f"[ExtractPlaylist] Using ie_key as URL: {video_url}")
+
+                        if not video_url:
+                            logging.warning(f"[ExtractPlaylist] No URL found for entry {i}, skipping")
+                            continue
+
+                        video_info = {
+                            'url': video_url,
+                            'title': entry.get('title', 'Unknown Title'),
+                            'duration': entry.get('duration', 0),
+                            'id': video_id
+                        }
+
+                        videos.append(video_info)
+                        logging.debug(f"[ExtractPlaylist] ✓ Added video: {video_info['title']}")
+
+                    except Exception as e:
+                        logging.warning(f"[ExtractPlaylist] Error processing entry {i}: {e}")
                         continue
 
-                    video_info = {
-                        'url': video_url,
-                        'title': entry.get('title', 'Unknown Title'),
-                        'duration': entry.get('duration', 0),
-                        'id': video_id
-                    }
+                logging.info(f"[ExtractPlaylist] Successfully extracted {len(videos)} videos from playlist")
 
-                    videos.append(video_info)
+                result = {
+                    'success': True,
+                    'playlist_title': info.get('title', 'Unknown Playlist'),
+                    'playlist_url': playlist_url,
+                    'video_count': len(videos),
+                    'videos': videos,
+                    'platform': info.get('extractor', 'unknown')
+                }
 
-                except Exception as e:
-                    logging.warning(f"[ExtractPlaylist] Error processing video entry: {e}")
-                    continue
+                return jsonify(result), 200
 
-            logging.info(f"[ExtractPlaylist] Successfully extracted {len(videos)} videos from playlist")
-
-            result = {
-                'success': True,
-                'playlist_title': info.get('title', 'Unknown Playlist'),
-                'playlist_url': playlist_url,
-                'video_count': len(videos),
-                'videos': videos,
-                'platform': info.get('extractor', 'unknown')
-            }
-
-            return jsonify(result), 200
+        except KeyError as e:
+            logging.error(f"[ExtractPlaylist] KeyError while processing playlist: {e}", exc_info=True)
+            return jsonify({"error": f"Playlist structure error: {str(e)}"}), 500
 
     except yt_dlp.utils.DownloadError as e:
         logging.error(f"[ExtractPlaylist] yt-dlp download error: {e}")
