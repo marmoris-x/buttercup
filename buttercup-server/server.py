@@ -6,6 +6,7 @@ import time
 import threading
 import subprocess
 import math
+import re
 from flask import Flask, request, send_file, jsonify, after_this_request
 from flask_cors import CORS
 import yt_dlp
@@ -13,6 +14,17 @@ import requests
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Helper function to mask sensitive data in logs
+def mask_sensitive_data(text):
+    """Mask API keys and other sensitive data in log messages"""
+    if not text:
+        return text
+    # Mask Groq API keys (format: gsk_...)
+    text = re.sub(r'(groqApiKey=)gsk_[a-zA-Z0-9]+', r'\1***MASKED***', text)
+    # Mask other API keys (generic pattern)
+    text = re.sub(r'([&?]api[_-]?key=)[^&\s]+', r'\1***MASKED***', text, flags=re.IGNORECASE)
+    return text
 
 app = Flask(__name__)
 CORS(app)  # This will allow the Chrome extension to make requests to the server
@@ -64,6 +76,11 @@ def get_audio():
             'outtmpl': base_path + '.%(ext)s',  # Let yt-dlp add the extension
             'quiet': False,
             'no_warnings': False,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['default']  # Fixes "No JavaScript runtime" warning
+                }
+            }
             # No postprocessors = no FFmpeg conversion = much faster
         }
         logging.info(f"Using optimized yt-dlp options: {ydl_opts}")
@@ -496,7 +513,10 @@ def transcribe_video():
     use_word_timestamps = request.args.get('useWordTimestamps', 'true').lower() == 'true'
     translate = request.args.get('translate', 'false').lower() == 'true'
 
-    logging.info(f"[TranscribeVideo] Received request for URL: {video_url}")
+    # Log request with masked API key
+    masked_request = mask_sensitive_data(request.url)
+    logging.info(f"[TranscribeVideo] Request: {masked_request}")
+    logging.info(f"[TranscribeVideo] Video URL: {video_url}")
     logging.info(f"[TranscribeVideo] Settings - Model: {groq_model}, Language: {language}, Temp: {temperature}, WordTimestamps: {use_word_timestamps}, Translate: {translate}")
 
     # Validate required parameters
@@ -523,6 +543,11 @@ def transcribe_video():
             'outtmpl': base_path + '.%(ext)s',
             'quiet': False,
             'no_warnings': False,
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['default']  # Fixes "No JavaScript runtime" warning
+                }
+            }
         }
 
         logging.info(f"[TranscribeVideo] Step 1: Downloading audio from {video_url}")
@@ -767,6 +792,11 @@ def extract_playlist():
             'quiet': False,
             'no_warnings': False,
             'ignoreerrors': True,  # Continue on errors
+            'extractor_args': {
+                'youtube': {
+                    'player_client': ['default']  # Fixes "No JavaScript runtime" warning
+                }
+            }
         }
 
         logging.info(f"[ExtractPlaylist] Extracting playlist info for: {playlist_url}")

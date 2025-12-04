@@ -204,7 +204,7 @@ echo ========================================
 echo  Server Ready!
 echo ========================================
 echo.
-echo Server URL: http://localhost:5000
+echo Server URL: http://localhost:8675
 echo.
 echo The Buttercup Chrome extension can now download audio from videos.
 echo Press Ctrl+C to stop the server.
