@@ -64,15 +64,20 @@ class BatchUI {
                 </div>
 
                 <!-- Control Buttons -->
-                <div class="grid grid-cols-3 gap-2">
+                <div class="grid grid-cols-2 gap-2">
                     <button id="batch-start" class="btn btn-sm btn-success" disabled>
-                        Start
+                        ▶️ Start
                     </button>
                     <button id="batch-pause" class="btn btn-sm btn-warning" disabled>
-                        Pause
+                        ⏸️ Pause
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="batch-stop" class="btn btn-sm btn-error" disabled>
+                        ⏹️ Stop
                     </button>
                     <button id="batch-clear" class="btn btn-sm btn-error btn-outline">
-                        Clear All
+                        🗑️ Clear All
                     </button>
                 </div>
 
@@ -168,6 +173,12 @@ class BatchUI {
         const pauseBtn = document.getElementById('batch-pause');
         if (pauseBtn) {
             pauseBtn.addEventListener('click', () => this.togglePause());
+        }
+
+        // Stop button
+        const stopBtn = document.getElementById('batch-stop');
+        if (stopBtn) {
+            stopBtn.addEventListener('click', () => this.stop());
         }
 
         // Clear button
@@ -654,6 +665,29 @@ class BatchUI {
         await this.loadBatchState();
     }
 
+    async stop() {
+        const youtubeTab = await this.findYouTubeTab();
+        if (!youtubeTab) {
+            this.showAlert('Please open a web page first', 'warning');
+            return;
+        }
+
+        try {
+            // Use message passing to send stop command
+            await chrome.tabs.sendMessage(youtubeTab.id, {
+                type: 'BATCH_COMMAND',
+                command: 'stop'
+            });
+
+            this.showAlert('Batch processing stopped', 'info');
+        } catch (error) {
+            console.error('[BatchUI] Failed to stop:', error);
+            this.showAlert(`Failed to stop: ${error.message}`, 'error');
+        }
+
+        await this.loadBatchState();
+    }
+
     async clearAll() {
         if (!confirm('Are you sure you want to clear all videos? This cannot be undone.')) {
             return;
@@ -734,17 +768,22 @@ class BatchUI {
         // Update buttons
         const startBtn = document.getElementById('batch-start');
         const pauseBtn = document.getElementById('batch-pause');
+        const stopBtn = document.getElementById('batch-stop');
 
         const hasVideos = this.videos.pending.length > 0 || this.videos.processing.length > 0;
 
         if (startBtn) {
             startBtn.disabled = !hasVideos || (this.isRunning && !this.isPaused);
-            startBtn.textContent = this.isRunning && !this.isPaused ? 'Running...' : 'Start';
+            startBtn.textContent = this.isRunning && !this.isPaused ? '▶️ Running...' : '▶️ Start';
         }
 
         if (pauseBtn) {
             pauseBtn.disabled = !this.isRunning;
-            pauseBtn.textContent = this.isPaused ? 'Resume' : 'Pause';
+            pauseBtn.textContent = this.isPaused ? '▶️ Resume' : '⏸️ Pause';
+        }
+
+        if (stopBtn) {
+            stopBtn.disabled = !this.isRunning;
         }
 
         // Update progress info
