@@ -88,16 +88,34 @@ class LogViewer {
                     </div>
                 </div>
 
+                <!-- Export options -->
+                <div class="form-control">
+                    <label class="label py-1">
+                        <span class="label-text text-xs">Export Limit</span>
+                    </label>
+                    <select id="export-limit" class="select select-bordered select-sm">
+                        <option value="50">Last 50 logs</option>
+                        <option value="100">Last 100 logs</option>
+                        <option value="200">Last 200 logs</option>
+                        <option value="all">All logs</option>
+                    </select>
+                </div>
+
                 <!-- Action buttons -->
-                <div class="grid grid-cols-3 gap-2">
+                <div class="grid grid-cols-2 gap-2">
                     <button id="export-logs-json" class="btn btn-sm btn-outline">
-                        JSON
+                        📥 JSON
                     </button>
                     <button id="export-logs-txt" class="btn btn-sm btn-outline">
-                        TXT
+                        📄 TXT
+                    </button>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="copy-logs-clipboard" class="btn btn-sm btn-outline btn-primary">
+                        📋 Copy
                     </button>
                     <button id="clear-logs" class="btn btn-sm btn-outline btn-error">
-                        Clear
+                        🗑️ Clear
                     </button>
                 </div>
 
@@ -170,6 +188,12 @@ class LogViewer {
         const exportTxtBtn = document.getElementById('export-logs-txt');
         if (exportTxtBtn) {
             exportTxtBtn.addEventListener('click', () => this.exportLogs('txt'));
+        }
+
+        // Copy to clipboard
+        const copyBtn = document.getElementById('copy-logs-clipboard');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => this.copyToClipboard());
         }
 
         // Clear logs
@@ -319,51 +343,100 @@ class LogViewer {
         if (warnEl) warnEl.textContent = this.logs.filter(log => log.level === 'WARN').length;
     }
 
+    getExportLimit() {
+        const limitSelect = document.getElementById('export-limit');
+        const limit = limitSelect ? limitSelect.value : '50';
+        return limit === 'all' ? this.logs.length : parseInt(limit);
+    }
+
+    getLogsForExport() {
+        let logs = [...this.logs];
+
+        // Apply current filters
+        if (this.currentFilters.level !== 'ALL') {
+            logs = logs.filter(log => log.level === this.currentFilters.level);
+        }
+        if (this.currentFilters.category !== 'ALL') {
+            logs = logs.filter(log => log.category === this.currentFilters.category);
+        }
+        if (this.currentFilters.searchText) {
+            const searchLower = this.currentFilters.searchText.toLowerCase();
+            logs = logs.filter(log =>
+                log.message.toLowerCase().includes(searchLower) ||
+                (log.data && JSON.stringify(log.data).toLowerCase().includes(searchLower))
+            );
+        }
+
+        // Apply export limit
+        const limit = this.getExportLimit();
+        return logs.slice(-limit);
+    }
+
     async exportLogs(format) {
         try {
-            const filters = this.currentFilters.level === 'ALL' && this.currentFilters.category === 'ALL'
-                ? {}
-                : {
-                    level: this.currentFilters.level !== 'ALL' ? this.currentFilters.level : undefined,
-                    category: this.currentFilters.category !== 'ALL' ? this.currentFilters.category : undefined
-                };
+            const logs = this.getLogsForExport();
 
-            // Execute in content script context
-            const results = await chrome.tabs.query({ active: true, currentWindow: true });
-            if (!results[0]) return;
-
-            const result = await chrome.scripting.executeScript({
-                target: { tabId: results[0].id },
-                func: async (format, filters) => {
-                    if (!window.buttercupLogger) {
-                        return { success: false, error: 'Logger not available' };
-                    }
-
-                    try {
-                        let content;
-                        if (format === 'json') {
-                            content = await window.buttercupLogger.exportLogsJSON(filters);
-                        } else {
-                            content = await window.buttercupLogger.exportLogsTXT(filters);
-                        }
-
-                        window.buttercupLogger.downloadLogs(content, format);
-                        return { success: true };
-                    } catch (error) {
-                        return { success: false, error: error.message };
-                    }
-                },
-                args: [format, filters]
-            });
-
-            if (result[0]?.result?.success) {
-                this.showAlert(`Logs exported as ${format.toUpperCase()}`, 'success');
-            } else {
-                this.showAlert('Failed to export logs', 'error');
+            if (logs.length === 0) {
+                this.showAlert('No logs to export', 'warning');
+                return;
             }
+
+            let content;
+            if (format === 'json') {
+                content = JSON.stringify(logs, null, 2);
+            } else {
+                // TXT format
+                content = logs.map(log => {
+                    const time = new Date(log.timestamp).toLocaleString();
+                    let line = `[${time}] [${log.level}] [${log.category}] ${log.message}`;
+                    if (log.data && Object.keys(log.data).length > 0) {
+                        line += `\nData: ${JSON.stringify(log.data, null, 2)}`;
+                    }
+                    return line;
+                }).join('\n\n');
+            }
+
+            // Download file
+            const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `buttercup-logs-${Date.now()}.${format}`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            this.showAlert(`Exported ${logs.length} logs as ${format.toUpperCase()}`, 'success');
         } catch (error) {
             console.error('[LogViewer] Export failed:', error);
             this.showAlert('Failed to export logs', 'error');
+        }
+    }
+
+    async copyToClipboard() {
+        try {
+            const logs = this.getLogsForExport();
+
+            if (logs.length === 0) {
+                this.showAlert('No logs to copy', 'warning');
+                return;
+            }
+
+            // Format as text
+            const text = logs.map(log => {
+                const time = new Date(log.timestamp).toLocaleString();
+                let line = `[${time}] [${log.level}] [${log.category}] ${log.message}`;
+                if (log.data && Object.keys(log.data).length > 0) {
+                    line += `\nData: ${JSON.stringify(log.data, null, 2)}`;
+                }
+                return line;
+            }).join('\n\n');
+
+            // Copy to clipboard
+            await navigator.clipboard.writeText(text);
+            this.showAlert(`Copied ${logs.length} logs to clipboard`, 'success');
+        } catch (error) {
+            console.error('[LogViewer] Copy failed:', error);
+            this.showAlert('Failed to copy to clipboard', 'error');
         }
     }
 

@@ -540,7 +540,12 @@ class BatchProcessor {
                 this.queue.unshift(video); // Add to front for retry
 
                 if (window.buttercupLogger) {
-                    window.buttercupLogger.warn('BATCH', `Retrying video: ${video.videoId} (attempt ${video.retries})`, { error: error.message });
+                    window.buttercupLogger.warn('BATCH', `Retrying video: ${video.videoId} (attempt ${video.retries}) - ${error.message}`, {
+                        videoId: video.videoId,
+                        error: error.message,
+                        retries: video.retries,
+                        maxRetries: video.maxRetries
+                    });
                 }
             } else {
                 // Mark as failed
@@ -553,7 +558,11 @@ class BatchProcessor {
                 this.stats.failedVideos++;
 
                 if (window.buttercupLogger) {
-                    window.buttercupLogger.error('BATCH', `Video processing failed: ${video.videoId}`, { error: error.message });
+                    window.buttercupLogger.error('BATCH', `Video processing failed: ${video.videoId} - ${error.message}`, {
+                        videoId: video.videoId,
+                        error: error.message,
+                        stack: error.stack
+                    });
                 }
             }
         }
