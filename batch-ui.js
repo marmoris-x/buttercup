@@ -263,12 +263,18 @@ class BatchUI {
 
         // Extract video IDs directly in popup context
         const videos = [];
+        let skippedCount = 0;
+
+        console.log(`[BatchUI] Processing ${allVideoUrls.length} video URLs...`);
+
         for (const url of allVideoUrls) {
+            console.log('[BatchUI] Processing URL:', url);
             const videoId = this.extractVideoId(url);
+
             if (videoId) {
                 // Fetch video title immediately (popup context has better CORS support)
                 const platform = this.getPlatformFromUrl(url);
-                console.log(`[BatchUI] Fetching title for ${platform} video:`, videoId);
+                console.log(`[BatchUI] ✓ Extracted video ID: ${videoId} (${platform})`);
 
                 const videoTitle = await this.fetchVideoTitle(url, videoId);
                 console.log('[BatchUI] ✓ Fetched title:', videoTitle);
@@ -297,12 +303,15 @@ class BatchUI {
                     maxRetries: 2
                 });
             } else {
-                console.warn('[BatchUI] Invalid video URL:', url);
+                skippedCount++;
+                console.warn('[BatchUI] ✗ Failed to extract video ID from URL:', url);
             }
         }
 
+        console.log(`[BatchUI] Processed: ${videos.length} valid, ${skippedCount} skipped`);
+
         if (videos.length === 0) {
-            this.showAlert('No valid video URLs found', 'error');
+            this.showAlert(`No valid video URLs found (${skippedCount} URLs could not be processed)`, 'error');
             return;
         }
 
@@ -376,7 +385,7 @@ class BatchUI {
     // Extract all videos from a playlist
     async extractPlaylistVideos(playlistUrl) {
         try {
-            console.log('[BatchUI] Extracting playlist:', playlistUrl);
+            console.log('[BatchUI] 📋 Extracting playlist:', playlistUrl);
 
             const serverUrl = 'http://127.0.0.1:8675';
             const response = await fetch(`${serverUrl}/extract-playlist?url=${encodeURIComponent(playlistUrl)}`);
@@ -387,22 +396,33 @@ class BatchUI {
             }
 
             const data = await response.json();
-            console.log('[BatchUI] ✓ Playlist extracted:', data);
+            console.log('[BatchUI] ✓ Server response:', data);
+
+            const videos = data.videos.map(v => {
+                console.log('[BatchUI] Video from playlist:', {
+                    url: v.url,
+                    title: v.title,
+                    id: v.id
+                });
+                return {
+                    url: v.url,
+                    title: v.title,
+                    duration: v.duration,
+                    videoId: v.id
+                };
+            });
+
+            console.log(`[BatchUI] ✓ Playlist extracted: "${data.playlist_title}" (${videos.length} videos)`);
 
             return {
                 title: data.playlist_title,
                 platform: data.platform,
                 videoCount: data.video_count,
-                videos: data.videos.map(v => ({
-                    url: v.url,
-                    title: v.title,
-                    duration: v.duration,
-                    videoId: v.id
-                }))
+                videos: videos
             };
 
         } catch (error) {
-            console.error('[BatchUI] Playlist extraction failed:', error);
+            console.error('[BatchUI] ❌ Playlist extraction failed:', error);
             throw error;
         }
     }
