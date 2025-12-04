@@ -8,6 +8,7 @@ const scriptsInLoadOrder = [
     'video-id-utils.js',      // Video ID extraction utilities
     'video-detector.js',      // Universal video detection
     'rate-limiter.js',        // Rate limiting for API calls
+    'rate-limit-tracker.js',  // Groq rate limit tracking & multi-key support
     'batch-processor.js',     // Batch processing
     'api/config.js',          // CRITICAL: APIConfig class - must load before other API scripts
     'api/cobalt.js',

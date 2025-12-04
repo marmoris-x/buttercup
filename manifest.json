@@ -30,6 +30,7 @@
                 "quality-report.js",
                 "logger.js",
                 "rate-limiter.js",
+                "rate-limit-tracker.js",
                 "batch-processor.js",
                 "api/cobalt.js",
                 "api/groq.js",
