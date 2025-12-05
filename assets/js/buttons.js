@@ -54,6 +54,7 @@ const startTranscription = document.getElementById('start-transcription');
 
 // API settings elements
 const groqApiKey = document.getElementById('groq-api-key');
+const groqApiKey2 = document.getElementById('groq-api-key-2');
 const groqModel = document.getElementById('groq-model');
 const modelTranslationNote = document.getElementById('model-translation-note');
 const saveApiSettings = document.getElementById('save-api-settings');
@@ -669,6 +670,7 @@ saveApiSettings.addEventListener('click', () => {
 
     const settings = {
         buttercup_groq_api_key: groqApiKey.value,
+        buttercup_groq_api_key_2: groqApiKey2.value || '', // Second key (optional)
         buttercup_groq_model: groqModel.value,
         buttercup_llm_translation_enabled: llmTranslationEnabled.checked,
         buttercup_llm_target_language: llmTargetLanguage.value,
@@ -1843,6 +1845,10 @@ chrome.storage.sync.get([
 
     if (result.buttercup_groq_api_key) {
         groqApiKey.value = result.buttercup_groq_api_key;
+    }
+
+    if (result.buttercup_groq_api_key_2) {
+        groqApiKey2.value = result.buttercup_groq_api_key_2;
     }
 
     if (result.buttercup_groq_model) {

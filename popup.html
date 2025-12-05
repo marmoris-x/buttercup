@@ -412,17 +412,28 @@ Second subtitle"></textarea>
 
         <!-- API Setup Tab -->
         <div id="api-tab" class="tab-content hidden">
-            <div class="divider">Groq API</div>
+            <div class="divider">Groq API Keys</div>
             <div class="form-control">
                 <label class="label">
-                    <span class="label-text">Groq API Key</span>
+                    <span class="label-text">Primary Groq API Key</span>
                 </label>
-                <input type="password" placeholder="Enter your Groq API key" class="input input-bordered api-input" id="groq-api-key" />
-                
+                <input type="password" placeholder="Enter your primary Groq API key" class="input input-bordered input-sm api-input" id="groq-api-key" />
+
+                <label class="label mt-2">
+                    <span class="label-text">Secondary Groq API Key (Optional)</span>
+                    <span class="label-text-alt text-info">2x capacity + auto-failover</span>
+                </label>
+                <input type="password" placeholder="Enter second key for auto-rotation" class="input input-bordered input-sm api-input" id="groq-api-key-2" />
+
+                <div class="alert alert-info text-xs mt-2 py-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" class="stroke-current shrink-0 w-4 h-4"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span>With 2 keys: 14,400s/hour + zero downtime on rate limits!</span>
+                </div>
+
                 <label class="label">
                     <span class="label-text">Groq Model</span>
                 </label>
-                <select class="select select-bordered w-full api-input" id="groq-model">
+                <select class="select select-bordered select-sm w-full api-input" id="groq-model">
                     <option value="whisper-large-v3">whisper-large-v3 (Best quality, multilingual, translation)</option>
                     <option value="whisper-large-v3-turbo">whisper-large-v3-turbo (Faster, multilingual)</option>
                     <option value="distil-whisper-large-v3-en">distil-whisper-large-v3-en (Fastest, English only)</option>
