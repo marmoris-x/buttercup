@@ -76,6 +76,11 @@ class BatchUI {
                     <button id="batch-stop" class="btn btn-sm btn-error" disabled>
                         ⏹️ Stop
                     </button>
+                    <button id="batch-restart-failed" class="btn btn-sm btn-warning btn-outline" disabled>
+                        🔄 Retry Failed
+                    </button>
+                </div>
+                <div class="grid grid-cols-1 gap-2">
                     <button id="batch-clear" class="btn btn-sm btn-error btn-outline">
                         🗑️ Clear All
                     </button>
@@ -179,6 +184,12 @@ class BatchUI {
         const stopBtn = document.getElementById('batch-stop');
         if (stopBtn) {
             stopBtn.addEventListener('click', () => this.stop());
+        }
+
+        // Restart Failed button
+        const restartFailedBtn = document.getElementById('batch-restart-failed');
+        if (restartFailedBtn) {
+            restartFailedBtn.addEventListener('click', () => this.restartFailed());
         }
 
         // Clear button
@@ -688,6 +699,68 @@ class BatchUI {
         await this.loadBatchState();
     }
 
+    async restartFailed() {
+        try {
+            // Load current batch state
+            const result = await chrome.storage.local.get(['buttercup_batch_processor']);
+            const batchState = result.buttercup_batch_processor;
+
+            if (!batchState || batchState.failed.length === 0) {
+                this.showAlert('No failed videos to restart', 'info');
+                return;
+            }
+
+            const failedCount = batchState.failed.length;
+
+            // Confirm with user
+            if (!confirm(`Restart ${failedCount} failed video(s)? They will be moved back to the queue and retried.`)) {
+                return;
+            }
+
+            // Reset each failed video
+            const resetVideos = batchState.failed.map(video => ({
+                ...video,
+                status: 'pending',
+                error: null,
+                retries: 0,  // Reset retry counter
+                progress: 0,
+                currentStep: '',
+                startedAt: null,
+                completedAt: null
+            }));
+
+            // Move failed videos back to queue
+            batchState.queue.push(...resetVideos);
+            batchState.failed = [];
+
+            // Update stats
+            batchState.stats.totalVideos = batchState.queue.length + batchState.completed.length;
+            batchState.stats.failedVideos = 0;
+
+            // Save updated state
+            await chrome.storage.local.set({ buttercup_batch_processor: batchState });
+
+            // Notify content script to reload
+            const tabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
+            for (const tab of tabs) {
+                try {
+                    await chrome.tabs.sendMessage(tab.id, {
+                        type: 'BATCH_COMMAND',
+                        command: 'reload'
+                    });
+                } catch (err) {
+                    console.log('[BatchUI] Could not notify tab:', err);
+                }
+            }
+
+            await this.loadBatchState();
+            this.showAlert(`Restarted ${failedCount} failed video(s)`, 'success');
+        } catch (error) {
+            console.error('[BatchUI] Failed to restart failed videos:', error);
+            this.showAlert(`Failed to restart: ${error.message}`, 'error');
+        }
+    }
+
     async clearAll() {
         if (!confirm('Are you sure you want to clear all videos? This cannot be undone.')) {
             return;
@@ -769,8 +842,10 @@ class BatchUI {
         const startBtn = document.getElementById('batch-start');
         const pauseBtn = document.getElementById('batch-pause');
         const stopBtn = document.getElementById('batch-stop');
+        const restartFailedBtn = document.getElementById('batch-restart-failed');
 
         const hasVideos = this.videos.pending.length > 0 || this.videos.processing.length > 0;
+        const hasFailedVideos = this.videos.failed.length > 0;
 
         if (startBtn) {
             startBtn.disabled = !hasVideos || (this.isRunning && !this.isPaused);
@@ -784,6 +859,10 @@ class BatchUI {
 
         if (stopBtn) {
             stopBtn.disabled = !this.isRunning;
+        }
+
+        if (restartFailedBtn) {
+            restartFailedBtn.disabled = !hasFailedVideos || this.isRunning;
         }
 
         // Update progress info
