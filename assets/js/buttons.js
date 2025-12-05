@@ -53,8 +53,7 @@ const language = document.getElementById('language');
 const startTranscription = document.getElementById('start-transcription');
 
 // API settings elements
-const groqApiKey = document.getElementById('groq-api-key');
-const groqApiKey2 = document.getElementById('groq-api-key-2');
+let groqKeyManager = null; // Will be initialized when API tab is loaded
 const groqModel = document.getElementById('groq-model');
 const modelTranslationNote = document.getElementById('model-translation-note');
 const saveApiSettings = document.getElementById('save-api-settings');
@@ -184,6 +183,10 @@ tabBatch.addEventListener('click', () => {
 
 tabApi.addEventListener('click', () => {
     switchTab(tabApi, apiTabContent);
+    // Initialize GroqKeyManager if not already initialized
+    if (!groqKeyManager) {
+        groqKeyManager = new GroqKeyManager();
+    }
 });
 
 tabAdvanced.addEventListener('click', () => {
@@ -639,66 +642,70 @@ darkMode.addEventListener('change', () => {
 });
 
 // API settings event listeners
-saveApiSettings.addEventListener('click', () => {
-    // Validate required fields
-    if (!groqApiKey.value) {
-        showAlert('Groq API Key is required', 'error');
+saveApiSettings.addEventListener('click', async () => {
+    // Validate and save Groq keys using GroqKeyManager
+    if (!groqKeyManager) {
+        showAlert('Key manager not initialized', 'error');
         return;
     }
 
-    // Validate LLM translation settings if enabled
-    if (llmTranslationEnabled.checked) {
-        if (!llmTargetLanguage.value) {
-            showAlert('Target language is required when LLM translation is enabled', 'error');
-            return;
+    try {
+        // Save Groq keys (this validates and saves to chrome.storage)
+        const validKeys = await groqKeyManager.save();
+
+        // Validate LLM translation settings if enabled
+        if (llmTranslationEnabled.checked) {
+            if (!llmTargetLanguage.value) {
+                showAlert('Target language is required when LLM translation is enabled', 'error');
+                return;
+            }
+            if (!llmApiKey.value) {
+                showAlert('LLM API key is required when LLM translation is enabled', 'error');
+                return;
+            }
+            if (!llmModel.value) {
+                showAlert('LLM model name is required when LLM translation is enabled', 'error');
+                return;
+            }
         }
-        if (!llmApiKey.value) {
-            showAlert('LLM API key is required when LLM translation is enabled', 'error');
-            return;
-        }
-        if (!llmModel.value) {
-            showAlert('LLM model name is required when LLM translation is enabled', 'error');
-            return;
-        }
-    }
 
-    // Save API settings to Chrome storage
-    // Save provider-specific settings
-    const currentProvider = llmProvider.value;
-    const providerApiKeyKey = `buttercup_llm_${currentProvider}_api_key`;
-    const providerModelKey = `buttercup_llm_${currentProvider}_model`;
+        // Save additional API settings to Chrome storage
+        const currentProvider = llmProvider.value;
+        const providerApiKeyKey = `buttercup_llm_${currentProvider}_api_key`;
+        const providerModelKey = `buttercup_llm_${currentProvider}_model`;
 
-    const settings = {
-        buttercup_groq_api_key: groqApiKey.value,
-        buttercup_groq_api_key_2: groqApiKey2.value || '', // Second key (optional)
-        buttercup_groq_model: groqModel.value,
-        buttercup_llm_translation_enabled: llmTranslationEnabled.checked,
-        buttercup_llm_target_language: llmTargetLanguage.value,
-        buttercup_llm_provider: llmProvider.value,
-        // Save provider-specific API key and model
-        [providerApiKeyKey]: llmApiKey.value,
-        [providerModelKey]: llmModel.value,
-        // Keep legacy keys for backward compatibility
-        buttercup_llm_api_key: llmApiKey.value,
-        buttercup_llm_model: llmModel.value
-    };
+        const settings = {
+            buttercup_groq_model: groqModel.value,
+            buttercup_llm_translation_enabled: llmTranslationEnabled.checked,
+            buttercup_llm_target_language: llmTargetLanguage.value,
+            buttercup_llm_provider: llmProvider.value,
+            // Save provider-specific API key and model
+            [providerApiKeyKey]: llmApiKey.value,
+            [providerModelKey]: llmModel.value,
+            // Keep legacy keys for backward compatibility
+            buttercup_llm_api_key: llmApiKey.value,
+            buttercup_llm_model: llmModel.value
+        };
 
-    chrome.storage.sync.set(settings);
+        chrome.storage.sync.set(settings);
 
-    // Show success message
-    showAlert('API settings saved successfully!', 'success');
+        // Show success message
+        showAlert('API settings saved successfully!', 'success');
 
-    // Notify any open YouTube tabs about the settings change
-    chrome.tabs.query({ url: "*://*.youtube.com/*" }, (tabs) => {
-        tabs.forEach(tab => {
-            chrome.scripting.executeScript({
-                target: { tabId: tab.id },
-                func: () => {
-                    document.dispatchEvent(new CustomEvent('buttercupApiSettingsChanged'));
-                }
-            }).catch(err => console.error('Error executing script:', err));
+        // Notify any open YouTube tabs about the settings change
+        chrome.tabs.query({ url: "*://*.youtube.com/*" }, (tabs) => {
+            tabs.forEach(tab => {
+                chrome.scripting.executeScript({
+                    target: { tabId: tab.id },
+                    func: () => {
+                        document.dispatchEvent(new CustomEvent('buttercupApiSettingsChanged'));
+                    }
+                }).catch(err => console.error('Error executing script:', err));
+            });
         });
-    });
+    } catch (error) {
+        showAlert(error.message, 'error');
+    }
 });
 
 // Advanced settings event listeners
@@ -1842,14 +1849,8 @@ chrome.storage.sync.get([
     }
 
     // API settings
-
-    if (result.buttercup_groq_api_key) {
-        groqApiKey.value = result.buttercup_groq_api_key;
-    }
-
-    if (result.buttercup_groq_api_key_2) {
-        groqApiKey2.value = result.buttercup_groq_api_key_2;
-    }
+    // Note: Groq API keys are now managed by GroqKeyManager
+    // They will be loaded automatically when the API tab is opened
 
     if (result.buttercup_groq_model) {
         groqModel.value = result.buttercup_groq_model;

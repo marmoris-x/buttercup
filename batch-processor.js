@@ -25,6 +25,7 @@ class BatchProcessor {
         this.isPaused = false;
         this.isInitialized = false;
         this.initPromise = null;
+        this.keyPool = null; // Groq API key pool for multi-key support
 
         // Statistics
         this.stats = {
@@ -135,6 +136,49 @@ class BatchProcessor {
     }
 
     /**
+     * Initialize Groq API key pool with all available keys
+     */
+    async initializeKeyPool() {
+        try {
+            const result = await new Promise((resolve) => {
+                chrome.storage.sync.get(['buttercup_groq_keys', 'buttercup_groq_api_key'], (r) => resolve(r));
+            });
+
+            let apiKeys = [];
+
+            // Load from new multi-key format
+            if (result.buttercup_groq_keys && result.buttercup_groq_keys.length > 0) {
+                apiKeys = result.buttercup_groq_keys;
+            }
+            // Backward compatibility: single key
+            else if (result.buttercup_groq_api_key) {
+                apiKeys = [result.buttercup_groq_api_key];
+            }
+
+            if (apiKeys.length === 0) {
+                throw new Error('No Groq API keys configured');
+            }
+
+            // Initialize key pool
+            if (window.GroqKeyPool) {
+                this.keyPool = new window.GroqKeyPool(apiKeys);
+                console.log(`[BatchProcessor] ✓ Initialized key pool with ${apiKeys.length} key(s)`);
+
+                if (window.buttercupLogger) {
+                    window.buttercupLogger.info('BATCH', `Key pool initialized with ${apiKeys.length} key(s)`);
+                }
+            } else {
+                console.warn('[BatchProcessor] GroqKeyPool not available, using first key only');
+                // Fallback to single key if key pool not available
+                this.keyPool = null;
+            }
+        } catch (error) {
+            console.error('[BatchProcessor] Error initializing key pool:', error);
+            throw error;
+        }
+    }
+
+    /**
      * Start batch processing
      */
     async start() {
@@ -168,6 +212,9 @@ class BatchProcessor {
             await this.saveState();
             return;
         }
+
+        // Initialize key pool for multi-key support
+        await this.initializeKeyPool();
 
         this.isRunning = true;
         this.isPaused = false;
@@ -292,6 +339,27 @@ class BatchProcessor {
             const videoInfo = await this.fetchVideoInfo(video.videoId);
             video.title = videoInfo.title || video.videoId;
 
+            // Select optimal Groq API key from pool
+            let selectedKeyTracker = null;
+            if (this.keyPool) {
+                video.currentStep = 'Selecting API key...';
+                this.notifyUpdate();
+
+                selectedKeyTracker = this.keyPool.getNextAvailable();
+
+                if (!selectedKeyTracker) {
+                    const minWaitTime = this.keyPool.getMinWaitTime();
+                    const message = minWaitTime > 0
+                        ? `All API keys rate limited. Wait ${minWaitTime}s for next available key.`
+                        : 'No API keys available with quota. Please add more keys or wait for quota reset.';
+
+                    throw new Error(message);
+                }
+
+                console.log(`[BatchProcessor] ✓ Selected Key ${selectedKeyTracker.index + 1} (${selectedKeyTracker.getRemaining()}s quota remaining)`);
+                video.selectedKeyIndex = selectedKeyTracker.index;
+            }
+
             // Initialize or wait for API config
             video.currentStep = 'Loading API configuration...';
             this.notifyUpdate();
@@ -316,6 +384,12 @@ class BatchProcessor {
                 // Initialize API config with received settings
                 window.apiConfig = new window.APIConfig();
                 window.apiConfig.initFromSettings(apiSettings);
+            }
+
+            // Update apiConfig with selected key from pool
+            if (selectedKeyTracker && window.apiConfig && window.apiConfig.groqAPI) {
+                window.apiConfig.groqAPI.setApiKey(selectedKeyTracker.apiKey);
+                console.log(`[BatchProcessor] Updated API config with Key ${selectedKeyTracker.index + 1}`);
             }
 
             // Wait for API config to have all required keys (with timeout)
@@ -431,12 +505,60 @@ class BatchProcessor {
 
                     console.log('[BatchProcessor] Video context for translation:', videoContext);
 
-                    // Translate the caption events
-                    const translatedEvents = await translator.translateCaptions(
-                        video.result.events,
-                        video.options.targetLanguage,
-                        videoContext
-                    );
+                    // Translate with retry logic for rate limits
+                    let translatedEvents = null;
+                    let translationRetries = 0;
+                    const maxTranslationRetries = 3;
+
+                    while (translationRetries <= maxTranslationRetries) {
+                        try {
+                            if (translationRetries > 0) {
+                                const retryDelay = Math.min(2 ** translationRetries * 1000, 60000); // Exponential backoff, max 60s
+                                console.log(`[BatchProcessor] Retry ${translationRetries}/${maxTranslationRetries} - waiting ${retryDelay/1000}s before retry...`);
+                                video.currentStep = `Translation retry ${translationRetries}/${maxTranslationRetries} (waiting ${retryDelay/1000}s)...`;
+                                this.notifyUpdate();
+                                await new Promise(resolve => setTimeout(resolve, retryDelay));
+                            }
+
+                            video.currentStep = `Translating to ${video.options.targetLanguage}...`;
+                            this.notifyUpdate();
+
+                            // Translate the caption events
+                            translatedEvents = await translator.translateCaptions(
+                                video.result.events,
+                                video.options.targetLanguage,
+                                videoContext
+                            );
+
+                            // Success - break out of retry loop
+                            break;
+                        } catch (translateError) {
+                            // Check if it's a rate limit error
+                            const isRateLimitError = translateError.message && (
+                                translateError.message.includes('429') ||
+                                translateError.message.includes('rate limit') ||
+                                translateError.message.includes('Rate limit') ||
+                                translateError.message.includes('quota') ||
+                                translateError.status === 429
+                            );
+
+                            if (isRateLimitError && translationRetries < maxTranslationRetries) {
+                                translationRetries++;
+                                console.warn(`[BatchProcessor] Translation rate limit hit, retry ${translationRetries}/${maxTranslationRetries}:`, translateError.message);
+
+                                if (window.buttercupLogger) {
+                                    window.buttercupLogger.warn('BATCH', `LLM translation rate limit - retry ${translationRetries}/${maxTranslationRetries}`, {
+                                        videoId: video.videoId,
+                                        provider: video.options.provider,
+                                        error: translateError.message
+                                    });
+                                }
+                            } else {
+                                // Not a rate limit error or max retries reached - throw to outer catch
+                                throw translateError;
+                            }
+                        }
+                    }
 
                     // Log sample of translated events for debugging
                     if (translatedEvents && translatedEvents.length > 0) {
@@ -444,22 +566,31 @@ class BatchProcessor {
                             original: video.result.events[0].segs.map(s => s.utf8).join(''),
                             translated: translatedEvents[0].segs.map(s => s.utf8).join('')
                         });
+
+                        // Update caption data with translations
+                        finalCaptionData = {
+                            ...video.result,
+                            events: translatedEvents
+                        };
+
+                        // Update video.result with translated data
+                        video.result = finalCaptionData;
+
+                        console.log('[BatchProcessor] ✓ LLM translation complete for:', video.videoId);
+                    } else {
+                        console.warn('[BatchProcessor] Translation returned empty results, using original transcript');
                     }
-
-                    // Update caption data with translations
-                    finalCaptionData = {
-                        ...video.result,
-                        events: translatedEvents
-                    };
-
-                    // Update video.result with translated data
-                    video.result = finalCaptionData;
-
-                    console.log('[BatchProcessor] ✓ LLM translation complete for:', video.videoId);
                 } catch (translationError) {
-                    console.error('[BatchProcessor] ⚠️ LLM translation failed:', translationError);
+                    console.error('[BatchProcessor] ⚠️ LLM translation failed after retries:', translationError);
                     console.log('[BatchProcessor] Continuing with untranslated transcript');
                     // Continue with untranslated transcript
+
+                    if (window.buttercupLogger) {
+                        window.buttercupLogger.warn('BATCH', `LLM translation failed for ${video.videoId}`, {
+                            error: translationError.message,
+                            provider: video.options.provider
+                        });
+                    }
                 }
             } else if (translateOption) {
                 console.log('[BatchProcessor] Translation requested but LLM settings incomplete:', {
@@ -501,6 +632,27 @@ class BatchProcessor {
                 console.error('[BatchProcessor] ✗ transcriptStorage not available on window!');
             }
 
+            // Track API usage for key pool (if available)
+            if (selectedKeyTracker && video.result) {
+                // Try to get audio duration from the transcription result
+                // Groq API returns duration in seconds
+                let audioDuration = 0;
+
+                // Parse from result if available
+                if (video.result.duration) {
+                    audioDuration = Math.ceil(video.result.duration);
+                } else if (video.result.events && video.result.events.length > 0) {
+                    // Estimate from last event timestamp
+                    const lastEvent = video.result.events[video.result.events.length - 1];
+                    audioDuration = Math.ceil((lastEvent.tStartMs + lastEvent.dDurationMs) / 1000);
+                }
+
+                if (audioDuration > 0) {
+                    selectedKeyTracker.trackUsage(audioDuration);
+                    console.log(`[BatchProcessor] ✓ Tracked ${audioDuration}s usage for Key ${selectedKeyTracker.index + 1}`);
+                }
+            }
+
             // Mark as completed
             video.status = 'completed';
             video.progress = 100;
@@ -528,7 +680,76 @@ class BatchProcessor {
         } catch (error) {
             console.error('[BatchProcessor] Error processing video:', video.videoId, error);
 
-            // Handle retry
+            // Check if this is a 429 rate limit error
+            const is429Error = error.message && (
+                error.message.includes('429') ||
+                error.message.includes('Rate limit') ||
+                error.message.includes('rate limit') ||
+                error.status === 429
+            );
+
+            // Handle 429 error with key rotation
+            if (is429Error && selectedKeyTracker && this.keyPool) {
+                console.log(`[BatchProcessor] 🚫 Rate limit hit on Key ${selectedKeyTracker.index + 1}`);
+
+                // Update key tracker with 429 error details
+                selectedKeyTracker.updateFrom429Error(error.message);
+
+                // Try to get alternative key
+                const nextKey = this.keyPool.handle429Error(selectedKeyTracker, error.message);
+
+                if (nextKey) {
+                    console.log(`[BatchProcessor] 🔄 Auto-switching to Key ${nextKey.index + 1} - retrying video immediately`);
+
+                    // Retry immediately with new key without incrementing retry counter
+                    video.status = 'pending';
+                    video.currentStep = `Switching to Key ${nextKey.index + 1}...`;
+                    video.error = null;
+
+                    // Move back to queue for immediate retry
+                    this.currentlyProcessing = this.currentlyProcessing.filter(v => v.videoId !== video.videoId);
+                    this.queue.unshift(video); // Add to front for immediate retry
+
+                    if (window.buttercupLogger) {
+                        window.buttercupLogger.info('BATCH', `Auto-rotated to Key ${nextKey.index + 1} for video: ${video.videoId}`);
+                    }
+
+                    await this.saveState();
+                    this.notifyUpdate();
+
+                    // Continue processing queue immediately
+                    setTimeout(() => this.processQueue(), 500);
+                    return; // Exit early to avoid normal retry logic
+                } else {
+                    // All keys are rate limited - wait for next available
+                    const minWaitTime = this.keyPool.getMinWaitTime();
+                    const waitMessage = `All ${this.keyPool.keys.length} API keys rate limited. Retry in ${minWaitTime}s.`;
+
+                    console.log(`[BatchProcessor] ⏸️ ${waitMessage}`);
+                    video.error = waitMessage;
+                    video.currentStep = `Waiting ${minWaitTime}s...`;
+
+                    if (window.buttercupLogger) {
+                        window.buttercupLogger.warn('BATCH', waitMessage);
+                    }
+
+                    // Don't increment retries for rate limit - just wait and retry
+                    video.status = 'pending';
+
+                    // Move back to queue
+                    this.currentlyProcessing = this.currentlyProcessing.filter(v => v.videoId !== video.videoId);
+                    this.queue.unshift(video);
+
+                    await this.saveState();
+                    this.notifyUpdate();
+
+                    // Wait for the specified time before continuing
+                    setTimeout(() => this.processQueue(), minWaitTime * 1000);
+                    return; // Exit early
+                }
+            }
+
+            // Handle regular retry (non-429 errors or 429 without key pool)
             if (video.retries < video.maxRetries) {
                 video.retries++;
                 video.status = 'pending';
