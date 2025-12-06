@@ -740,13 +740,20 @@ class BatchUI {
             // Save updated state
             await chrome.storage.local.set({ buttercup_batch_processor: batchState });
 
-            // Notify content script to reload
+            // Notify content script to reload state and start processing
             const tabs = await chrome.tabs.query({ url: "*://*.youtube.com/*" });
             for (const tab of tabs) {
                 try {
+                    // First reload the state
                     await chrome.tabs.sendMessage(tab.id, {
                         type: 'BATCH_COMMAND',
                         command: 'reload'
+                    });
+
+                    // Then start the batch processor
+                    await chrome.tabs.sendMessage(tab.id, {
+                        type: 'BATCH_COMMAND',
+                        command: 'start'
                     });
                 } catch (err) {
                     console.log('[BatchUI] Could not notify tab:', err);
@@ -754,7 +761,7 @@ class BatchUI {
             }
 
             await this.loadBatchState();
-            this.showAlert(`Restarted ${failedCount} failed video(s)`, 'success');
+            this.showAlert(`Restarted ${failedCount} failed video(s) - batch processing started`, 'success');
         } catch (error) {
             console.error('[BatchUI] Failed to restart failed videos:', error);
             this.showAlert(`Failed to restart: ${error.message}`, 'error');
