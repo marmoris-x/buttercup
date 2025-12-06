@@ -836,6 +836,12 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
 
                                         // Create transcript search interface
                                         if (window.TranscriptSearch) {
+                                            // Destroy old instance if exists (prevents duplicate event listeners)
+                                            if (window.buttercupTranscriptSearch) {
+                                                window.buttercupTranscriptSearch.destroy();
+                                                window.buttercupTranscriptSearch = null;
+                                            }
+
                                             const transcriptSearch = new window.TranscriptSearch(savedTranscript.captionData);
                                             window.buttercupTranscriptSearch = transcriptSearch;
                                             console.info('[Buttercup] ✓ Transcript search initialized (Press Ctrl+F to search)');
@@ -1001,6 +1007,12 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
 
                                         // Create transcript search
                                         if (window.TranscriptSearch) {
+                                            // Destroy old instance if exists (prevents duplicate event listeners)
+                                            if (window.buttercupTranscriptSearch) {
+                                                window.buttercupTranscriptSearch.destroy();
+                                                window.buttercupTranscriptSearch = null;
+                                            }
+
                                             const transcriptSearch = new window.TranscriptSearch(savedTranscript.captionData);
                                             window.buttercupTranscriptSearch = transcriptSearch;
                                             console.info('[Buttercup] ✅ Transcript search initialized');
@@ -1233,6 +1245,12 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
 
                         // Create transcript search interface
                         if (window.TranscriptSearch) {
+                            // Destroy old instance if exists (prevents duplicate event listeners)
+                            if (window.buttercupTranscriptSearch) {
+                                window.buttercupTranscriptSearch.destroy();
+                                window.buttercupTranscriptSearch = null;
+                            }
+
                             const transcriptSearch = new window.TranscriptSearch(finalCaptionData);
                             window.buttercupTranscriptSearch = transcriptSearch;
                             console.info('[Buttercup] ✓ Transcript search initialized (Press Ctrl+F to search)');
@@ -1464,4 +1482,82 @@ const escapeHTMLPolicy = trustedTypes.createPolicy('forceInner', {
         }
         return Math.abs(hash).toString(36);
     }
+})();
+
+// ============================================================================
+// CLEANUP HANDLER FOR PAGE NAVIGATION (YouTube SPA)
+// ============================================================================
+// YouTube uses SPA (Single Page Application) navigation, so the page doesn't
+// actually reload when navigating between videos. We need to cleanup old
+// instances to prevent duplicate event listeners and memory leaks.
+
+(function setupNavigationCleanup() {
+    let lastUrl = window.location.href;
+
+    // Listen for YouTube's navigation finish event
+    document.addEventListener('yt-navigate-finish', () => {
+        const currentUrl = window.location.href;
+
+        // Only cleanup if we navigated to a different video
+        if (currentUrl !== lastUrl) {
+            console.info('[Buttercup] Navigation detected, cleaning up old instances...');
+
+            // Cleanup old transcript search instance
+            if (window.buttercupTranscriptSearch) {
+                try {
+                    window.buttercupTranscriptSearch.destroy();
+                    window.buttercupTranscriptSearch = null;
+                    console.info('[Buttercup] ✓ Old TranscriptSearch instance destroyed');
+                } catch (error) {
+                    console.warn('[Buttercup] Error destroying TranscriptSearch:', error);
+                }
+            }
+
+            // Cleanup old caption overlay instance
+            if (window.buttercupCaptionOverlay) {
+                try {
+                    window.buttercupCaptionOverlay.destroy();
+                    window.buttercupCaptionOverlay = null;
+                    console.info('[Buttercup] ✓ Old CaptionOverlay instance destroyed');
+                } catch (error) {
+                    console.warn('[Buttercup] Error destroying CaptionOverlay:', error);
+                }
+            }
+
+            // Cleanup old summary sidebar instance
+            if (window.buttercupSummarySidebar) {
+                try {
+                    window.buttercupSummarySidebar.destroy();
+                    window.buttercupSummarySidebar = null;
+                    console.info('[Buttercup] ✓ Old SummarySidebar instance destroyed');
+                } catch (error) {
+                    console.warn('[Buttercup] Error destroying SummarySidebar:', error);
+                }
+            }
+
+            lastUrl = currentUrl;
+        }
+    });
+
+    // Fallback: also listen for URL changes via popstate (browser back/forward)
+    window.addEventListener('popstate', () => {
+        const currentUrl = window.location.href;
+
+        if (currentUrl !== lastUrl && currentUrl.includes('youtube.com/watch')) {
+            console.info('[Buttercup] Popstate detected, cleaning up old instances...');
+
+            if (window.buttercupTranscriptSearch) {
+                try {
+                    window.buttercupTranscriptSearch.destroy();
+                    window.buttercupTranscriptSearch = null;
+                } catch (error) {
+                    console.warn('[Buttercup] Error destroying TranscriptSearch:', error);
+                }
+            }
+
+            lastUrl = currentUrl;
+        }
+    });
+
+    console.info('[Buttercup] ✓ Navigation cleanup handler initialized');
 })();
