@@ -23,6 +23,17 @@ class BatchUI {
         this.createUI();
         await this.loadBatchState();
         this.attachEventListeners();
+        await this.loadSettings();
+    }
+
+    async loadSettings() {
+        // Load skip existing setting
+        const result = await chrome.storage.sync.get(['buttercup_batch_skip_existing']);
+        const skipExistingCheckbox = document.getElementById('batch-skip-existing');
+        if (skipExistingCheckbox) {
+            // Default to true (checked) if not set
+            skipExistingCheckbox.checked = result.buttercup_batch_skip_existing !== false;
+        }
     }
 
     createUI() {
@@ -52,6 +63,14 @@ class BatchUI {
                     </label>
                     <textarea id="batch-urls" class="textarea textarea-bordered h-20 text-xs"
                               placeholder="Paste video or playlist URLs (one per line)&#10;&#10;Videos: YouTube, Vimeo, Dailymotion, Twitter, TikTok...&#10;Playlists: YouTube playlists, Vimeo showcases...&#10;&#10;https://www.youtube.com/watch?v=...&#10;https://www.youtube.com/playlist?list=..."></textarea>
+
+                    <label class="label cursor-pointer mt-2">
+                        <span class="label-text">
+                            <span class="font-medium">Skip already transcribed videos</span>
+                            <span class="text-xs opacity-70 ml-1">(Saves API quota)</span>
+                        </span>
+                        <input type="checkbox" id="batch-skip-existing" class="toggle toggle-sm toggle-primary" checked />
+                    </label>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2">
@@ -198,6 +217,17 @@ class BatchUI {
             clearBtn.addEventListener('click', () => this.clearAll());
         }
 
+        // Skip existing checkbox - save preference when changed
+        const skipExistingCheckbox = document.getElementById('batch-skip-existing');
+        if (skipExistingCheckbox) {
+            skipExistingCheckbox.addEventListener('change', () => {
+                chrome.storage.sync.set({
+                    buttercup_batch_skip_existing: skipExistingCheckbox.checked
+                });
+                console.log('[BatchUI] Skip existing transcripts:', skipExistingCheckbox.checked);
+            });
+        }
+
         // Listen for batch updates from content script
         chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
             if (tabs[0]) {
@@ -337,9 +367,13 @@ class BatchUI {
             return;
         }
 
-        // Load existing batch state
-        const result = await chrome.storage.local.get(['buttercup_batch_processor']);
-        const batchState = result.buttercup_batch_processor || {
+        // Check if we should skip already transcribed videos
+        const skipExistingCheckbox = document.getElementById('batch-skip-existing');
+        const skipExisting = skipExistingCheckbox ? skipExistingCheckbox.checked : false;
+
+        // Load existing batch state and transcripts
+        const storageData = await chrome.storage.local.get(['buttercup_batch_processor', 'buttercup_transcripts']);
+        const batchState = storageData.buttercup_batch_processor || {
             queue: [],
             completed: [],
             failed: [],
@@ -356,17 +390,36 @@ class BatchUI {
             isPaused: false
         };
 
+        const existingTranscripts = storageData.buttercup_transcripts || {};
+
         // Check for duplicates and add new videos
         let addedCount = 0;
-        for (const video of videos) {
-            const exists = batchState.queue.some(v => v.videoId === video.videoId) ||
-                          batchState.completed.some(v => v.videoId === video.videoId) ||
-                          batchState.failed.some(v => v.videoId === video.videoId);
+        let skippedExistingCount = 0;
+        let skippedDuplicateCount = 0;
 
-            if (!exists) {
-                batchState.queue.push(video);
-                addedCount++;
+        for (const video of videos) {
+            // Check if already in current batch
+            const inBatch = batchState.queue.some(v => v.videoId === video.videoId) ||
+                           batchState.completed.some(v => v.videoId === video.videoId) ||
+                           batchState.failed.some(v => v.videoId === video.videoId);
+
+            if (inBatch) {
+                skippedDuplicateCount++;
+                console.log(`[BatchUI] ⏭️  Skipped (already in batch): ${video.videoId}`);
+                continue;
             }
+
+            // Check if already transcribed (if skip option enabled)
+            if (skipExisting && existingTranscripts[video.videoId]) {
+                skippedExistingCount++;
+                console.log(`[BatchUI] ⏭️  Skipped (already transcribed): ${video.videoId} - "${video.title}"`);
+                continue;
+            }
+
+            // Add to queue
+            batchState.queue.push(video);
+            addedCount++;
+            console.log(`[BatchUI] ✅ Added to queue: ${video.videoId} - "${video.title}"`);
         }
 
         // Update stats
@@ -375,12 +428,23 @@ class BatchUI {
         // Save back to storage
         await chrome.storage.local.set({ buttercup_batch_processor: batchState });
 
+        // Show comprehensive feedback
+        const messages = [];
+        if (addedCount > 0) messages.push(`✅ ${addedCount} added`);
+        if (skippedExistingCount > 0) messages.push(`⏭️  ${skippedExistingCount} skipped (already transcribed)`);
+        if (skippedDuplicateCount > 0) messages.push(`🔄 ${skippedDuplicateCount} skipped (duplicate)`);
+
+        if (messages.length > 0) {
+            const alertType = addedCount > 0 ? 'success' : 'info';
+            this.showAlert(messages.join(' • '), alertType);
+        }
+
         if (addedCount > 0) {
-            this.showAlert(`Added ${addedCount} video(s) to queue`, 'success');
             textarea.value = '';
             await this.loadBatchState();
-        } else {
-            this.showAlert('All videos already in queue', 'warning');
+        } else if (messages.length === 0) {
+            // No videos were processed at all
+            this.showAlert('No videos could be added to queue', 'warning');
         }
     }
 
