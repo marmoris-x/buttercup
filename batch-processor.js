@@ -234,9 +234,10 @@ class BatchProcessor {
             return;
         }
 
-        // If isRunning is true but nothing is being processed, it's a stale state - reset it
-        if (this.isRunning && this.currentlyProcessing.length === 0 && this.queue.length > 0) {
-            console.log('[BatchProcessor] Resetting stale running state');
+        // If we were already running before (not a fresh start from UI),
+        // and isRunning is true but nothing is being processed, it's a stale state
+        if (wasRunning && this.isRunning && this.currentlyProcessing.length === 0 && this.queue.length > 0) {
+            console.log('[BatchProcessor] Resetting stale running state from previous session');
             this.isRunning = false;
         }
 
