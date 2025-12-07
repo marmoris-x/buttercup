@@ -750,22 +750,52 @@ class BatchUI {
     }
 
     async togglePause() {
+        console.log('[BatchUI] Toggle pause clicked');
+
         const youtubeTab = await this.findYouTubeTab();
         if (!youtubeTab) {
-            this.showAlert('Please open a YouTube tab first', 'warning');
+            this.showAlert('Please open a web page first', 'warning');
+            console.warn('[BatchUI] No suitable tab found for pause');
             return;
         }
+
+        console.log('[BatchUI] Using tab for pause:', youtubeTab.id, youtubeTab.url);
 
         const action = this.isPaused ? 'resume' : 'pause';
 
         try {
-            // Use message passing instead of executeScript
-            await chrome.tabs.sendMessage(youtubeTab.id, {
-                type: 'BATCH_COMMAND',
-                command: action
-            });
+            console.log(`[BatchUI] Sending ${action.toUpperCase()} command to tab:`, youtubeTab.id);
+
+            // Try to send command
+            try {
+                const response = await chrome.tabs.sendMessage(youtubeTab.id, {
+                    type: 'BATCH_COMMAND',
+                    command: action
+                });
+                console.log(`[BatchUI] ${action.toUpperCase()} command response:`, response);
+            } catch (pingError) {
+                // Content script not loaded - reload the tab and try again
+                console.warn('[BatchUI] Content script not ready for pause:', pingError.message);
+                console.log('[BatchUI] Reloading tab and retrying pause...');
+
+                this.showAlert('Content script not loaded, reloading page...', 'info');
+
+                await chrome.tabs.reload(youtubeTab.id);
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                console.log(`[BatchUI] Retrying ${action.toUpperCase()} command...`);
+
+                const retryResponse = await chrome.tabs.sendMessage(youtubeTab.id, {
+                    type: 'BATCH_COMMAND',
+                    command: action
+                });
+                console.log(`[BatchUI] Retry ${action.toUpperCase()} command response:`, retryResponse);
+            }
+
+            this.showAlert(`Batch processing ${action === 'pause' ? 'paused' : 'resumed'}`, 'success');
+            console.log(`[BatchUI] ✅ Batch processing ${action}d successfully`);
         } catch (error) {
-            console.error('[BatchUI] Failed to toggle pause:', error);
+            console.error('[BatchUI] ❌ Failed to toggle pause:', error);
             this.showAlert(`Failed to ${action}: ${error.message}`, 'error');
         }
 
@@ -773,22 +803,50 @@ class BatchUI {
     }
 
     async stop() {
+        console.log('[BatchUI] Stop button clicked');
+
         const youtubeTab = await this.findYouTubeTab();
         if (!youtubeTab) {
             this.showAlert('Please open a web page first', 'warning');
+            console.warn('[BatchUI] No suitable tab found for stop');
             return;
         }
 
-        try {
-            // Use message passing to send stop command
-            await chrome.tabs.sendMessage(youtubeTab.id, {
-                type: 'BATCH_COMMAND',
-                command: 'stop'
-            });
+        console.log('[BatchUI] Using tab for stop:', youtubeTab.id, youtubeTab.url);
 
-            this.showAlert('Batch processing stopped', 'info');
+        try {
+            console.log('[BatchUI] Sending STOP command to tab:', youtubeTab.id);
+
+            // Try to send command
+            try {
+                const response = await chrome.tabs.sendMessage(youtubeTab.id, {
+                    type: 'BATCH_COMMAND',
+                    command: 'stop'
+                });
+                console.log('[BatchUI] STOP command response:', response);
+            } catch (pingError) {
+                // Content script not loaded - reload the tab and try again
+                console.warn('[BatchUI] Content script not ready for stop:', pingError.message);
+                console.log('[BatchUI] Reloading tab and retrying stop...');
+
+                this.showAlert('Content script not loaded, reloading page...', 'info');
+
+                await chrome.tabs.reload(youtubeTab.id);
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                console.log('[BatchUI] Retrying STOP command...');
+
+                const retryResponse = await chrome.tabs.sendMessage(youtubeTab.id, {
+                    type: 'BATCH_COMMAND',
+                    command: 'stop'
+                });
+                console.log('[BatchUI] Retry STOP command response:', retryResponse);
+            }
+
+            this.showAlert('Batch processing stopped', 'success');
+            console.log('[BatchUI] ✅ Batch processing stopped successfully');
         } catch (error) {
-            console.error('[BatchUI] Failed to stop:', error);
+            console.error('[BatchUI] ❌ Failed to stop:', error);
             this.showAlert(`Failed to stop: ${error.message}`, 'error');
         }
 
