@@ -480,6 +480,8 @@ document.addEventListener('buttercupStorageRequest', function (e) {
     if (action === 'get') {
         // Get data from chrome.storage (local or sync)
         const keys = Array.isArray(key) ? key : [key];
+        const isSingleKey = !Array.isArray(key);
+
         chrome.storage[storage].get(keys, (result) => {
             if (chrome.runtime.lastError) {
                 document.dispatchEvent(new CustomEvent('buttercupStorageResponse', {
@@ -491,10 +493,15 @@ document.addEventListener('buttercupStorageRequest', function (e) {
                 return;
             }
 
+            // For backward compatibility:
+            // - Single key: return just the value (e.g., {...})
+            // - Multiple keys: return whole result object (e.g., {key1: ..., key2: ...})
+            const responseData = isSingleKey ? (result[key] || {}) : result;
+
             document.dispatchEvent(new CustomEvent('buttercupStorageResponse', {
                 detail: {
                     requestId: requestId,
-                    data: result
+                    data: responseData
                 }
             }));
         });

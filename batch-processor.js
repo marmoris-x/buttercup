@@ -177,6 +177,9 @@ class BatchProcessor {
 
             let apiKeys = [];
 
+            // result contains the full object since we requested an array of keys
+            // result = {buttercup_groq_keys: [...], buttercup_groq_api_key: '...'}
+
             // Load from new multi-key format
             if (result.buttercup_groq_keys && result.buttercup_groq_keys.length > 0) {
                 apiKeys = result.buttercup_groq_keys;
