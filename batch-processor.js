@@ -137,11 +137,42 @@ class BatchProcessor {
 
     /**
      * Initialize Groq API key pool with all available keys
+     * Uses event-based storage access for MAIN world compatibility
      */
     async initializeKeyPool() {
         try {
-            const result = await new Promise((resolve) => {
-                chrome.storage.sync.get(['buttercup_groq_keys', 'buttercup_groq_api_key'], (r) => resolve(r));
+            // Use storage bridge to communicate with content script
+            const result = await new Promise((resolve, reject) => {
+                const requestId = `batch_groq_keys_${Date.now()}`;
+                const timeout = 5000;
+
+                const handler = (e) => {
+                    if (e.detail.requestId === requestId) {
+                        document.removeEventListener('buttercupStorageResponse', handler);
+                        if (e.detail.error) {
+                            reject(new Error(e.detail.error));
+                        } else {
+                            resolve(e.detail.data || {});
+                        }
+                    }
+                };
+
+                document.addEventListener('buttercupStorageResponse', handler);
+
+                document.dispatchEvent(new CustomEvent('buttercupStorageRequest', {
+                    detail: {
+                        action: 'get',
+                        key: ['buttercup_groq_keys', 'buttercup_groq_api_key'],
+                        storageType: 'sync', // CRITICAL: Use sync storage
+                        requestId: requestId
+                    }
+                }));
+
+                // Timeout after 5 seconds
+                setTimeout(() => {
+                    document.removeEventListener('buttercupStorageResponse', handler);
+                    reject(new Error('Storage request timeout'));
+                }, timeout);
             });
 
             let apiKeys = [];
@@ -156,7 +187,7 @@ class BatchProcessor {
             }
 
             if (apiKeys.length === 0) {
-                throw new Error('No Groq API keys configured');
+                throw new Error('No Groq API keys configured. Please add at least one API key in the settings.');
             }
 
             // Initialize key pool

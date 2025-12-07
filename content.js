@@ -463,34 +463,56 @@ document.addEventListener('buttercupShowError', function (e) {
 document.addEventListener('buttercupStorageRequest', function (e) {
     if (!e.detail) return;
 
-    const { action, key, data, requestId } = e.detail;
+    const { action, key, data, requestId, storageType } = e.detail;
+    const storage = storageType === 'sync' ? 'sync' : 'local'; // Default to local
 
     // Safety check for extension context
-    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage.local) {
+    if (typeof chrome === 'undefined' || !chrome.storage || !chrome.storage[storage]) {
         document.dispatchEvent(new CustomEvent('buttercupStorageResponse', {
             detail: {
                 requestId: requestId,
-                error: 'Extension context not available'
+                error: `Extension context not available or storage.${storage} not accessible`
             }
         }));
         return;
     }
 
     if (action === 'get') {
-        // Get data from chrome.storage.local
-        chrome.storage.local.get([key], (result) => {
+        // Get data from chrome.storage (local or sync)
+        const keys = Array.isArray(key) ? key : [key];
+        chrome.storage[storage].get(keys, (result) => {
+            if (chrome.runtime.lastError) {
+                document.dispatchEvent(new CustomEvent('buttercupStorageResponse', {
+                    detail: {
+                        requestId: requestId,
+                        error: chrome.runtime.lastError.message
+                    }
+                }));
+                return;
+            }
+
             document.dispatchEvent(new CustomEvent('buttercupStorageResponse', {
                 detail: {
                     requestId: requestId,
-                    data: result[key] || {}
+                    data: result
                 }
             }));
         });
     } else if (action === 'set') {
-        // Set data to chrome.storage.local
+        // Set data to chrome.storage (local or sync)
         const storageObj = {};
         storageObj[key] = data;
-        chrome.storage.local.set(storageObj, () => {
+        chrome.storage[storage].set(storageObj, () => {
+            if (chrome.runtime.lastError) {
+                document.dispatchEvent(new CustomEvent('buttercupStorageResponse', {
+                    detail: {
+                        requestId: requestId,
+                        error: chrome.runtime.lastError.message
+                    }
+                }));
+                return;
+            }
+
             document.dispatchEvent(new CustomEvent('buttercupStorageResponse', {
                 detail: {
                     requestId: requestId,
