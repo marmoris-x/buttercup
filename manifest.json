@@ -1,0 +1,61 @@
+{
+    "manifest_version": 3,
+    "name": "Buttercup",
+    "version": "0.2.0",
+    "description": "AI-powered video transcription and translation for YouTube, Vimeo, Dailymotion, Twitter, TikTok, and 1000+ video sites using OpenAI Whisper",
+    "permissions": ["activeTab", "tabs", "storage", "scripting", "clipboardRead"],
+    "host_permissions": [
+        "<all_urls>",
+        "https://buttercup.igerman.cc/*",
+        "https://api.groq.com/*",
+        "http://127.0.0.1:8675/*"
+    ],
+    "content_scripts": [
+        {
+            "matches": ["<all_urls>"],
+            "js": ["content.js"],
+            "run_at": "document_start"
+        }
+    ],
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "buttercup.js",
+                "video-detector.js",
+                "video-id-utils.js",
+                "caption-overlay.js",
+                "summary-sidebar.js",
+                "progress-indicator.js",
+                "transcript-search.js",
+                "quality-report.js",
+                "logger.js",
+                "rate-limiter.js",
+                "rate-limit-tracker.js",
+                "batch-processor.js",
+                "api/cobalt.js",
+                "api/groq.js",
+                "api/config.js",
+                "api/transcription.js",
+                "api/llm-translation.js",
+                "api/transcript-storage.js",
+                "api/ai-summary.js"
+            ],
+            "matches": ["<all_urls>"]
+        }
+    ],
+    "action": {
+        "default_popup": "popup.html",
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "32": "icons/icon32.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
+        }
+    },
+    "icons": {
+        "16": "icons/icon16.png",
+        "32": "icons/icon32.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    }
+}

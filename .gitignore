@@ -1,0 +1,3 @@
+
+# Ignore the Python virtual environment
+buttercup-server/venv/
