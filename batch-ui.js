@@ -649,20 +649,40 @@ class BatchUI {
     }
 
     async start() {
+        console.log('[BatchUI] Start button clicked');
+
         // Load batch state first
         const result = await chrome.storage.local.get(['buttercup_batch_processor']);
         const batchState = result.buttercup_batch_processor;
 
-        if (!batchState || batchState.queue.length === 0) {
-            this.showAlert('No videos in queue to process', 'warning');
+        console.log('[BatchUI] Batch state:', batchState);
+
+        if (!batchState) {
+            this.showAlert('Batch processor not initialized. Please add videos first.', 'warning');
+            console.warn('[BatchUI] No batch state found');
             return;
         }
 
-        const youtubeTab = await this.findYouTubeTab();
-        if (!youtubeTab) {
-            this.showAlert('Please open any web page (e.g., google.com) to start batch processing', 'warning');
+        if (batchState.queue.length === 0) {
+            this.showAlert(`No videos in queue to process. Queue: ${batchState.queue.length}, Completed: ${batchState.completed.length}, Failed: ${batchState.failed.length}`, 'warning');
+            console.warn('[BatchUI] Queue is empty:', {
+                queue: batchState.queue.length,
+                completed: batchState.completed.length,
+                failed: batchState.failed.length
+            });
             return;
         }
+
+        console.log('[BatchUI] Finding suitable tab...');
+        const youtubeTab = await this.findYouTubeTab();
+
+        if (!youtubeTab) {
+            this.showAlert('Please open any web page (e.g., google.com) to start batch processing', 'warning');
+            console.warn('[BatchUI] No suitable tab found');
+            return;
+        }
+
+        console.log('[BatchUI] Using tab:', youtubeTab.id, youtubeTab.url);
 
         // Set running state in storage first
         batchState.isRunning = true;
@@ -675,28 +695,40 @@ class BatchUI {
                 throw new Error('Extension context invalidated - please reload the extension');
             }
 
+            console.log('[BatchUI] Sending START command to tab:', youtubeTab.id);
+
             // Test if content script is loaded by sending message
             try {
-                await chrome.tabs.sendMessage(youtubeTab.id, {
+                const response = await chrome.tabs.sendMessage(youtubeTab.id, {
                     type: 'BATCH_COMMAND',
                     command: 'start'
                 });
+                console.log('[BatchUI] START command response:', response);
             } catch (pingError) {
                 // Content script not loaded - reload the tab and try again
-                console.log('[BatchUI] Content script not ready, reloading tab...');
+                console.warn('[BatchUI] Content script not ready:', pingError.message);
+                console.log('[BatchUI] Reloading tab and retrying...');
+
+                this.showAlert('Content script not loaded, reloading page...', 'info');
+
                 await chrome.tabs.reload(youtubeTab.id);
                 // Wait for page to load
-                await new Promise(resolve => setTimeout(resolve, 2000));
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                console.log('[BatchUI] Retrying START command...');
+
                 // Try again
-                await chrome.tabs.sendMessage(youtubeTab.id, {
+                const retryResponse = await chrome.tabs.sendMessage(youtubeTab.id, {
                     type: 'BATCH_COMMAND',
                     command: 'start'
                 });
+                console.log('[BatchUI] Retry START command response:', retryResponse);
             }
 
-            this.showAlert('Batch processing started', 'success');
+            this.showAlert(`Batch processing started! Processing ${batchState.queue.length} video(s)`, 'success');
+            console.log('[BatchUI] ✅ Batch processing started successfully');
         } catch (error) {
-            console.error('[BatchUI] Failed to start batch processing:', error);
+            console.error('[BatchUI] ❌ Failed to start batch processing:', error);
 
             // Provide helpful error message
             let errorMsg = 'Failed to start. ';
