@@ -3,7 +3,8 @@
  * Features: Filters, Bulk Actions, Folders, Tags, Favorites, Duration tracking
  */
 
-console.log('[Transcripts] Script loaded');
+console.log('[Transcripts] Script loaded - VERSION 2.0 WITH CHECKBOXES');
+console.log('[Transcripts] Checkbox feature enabled!');
 
 let allTranscripts = {};
 let transcriptMeta = {}; // folders, tags, favorites
