@@ -71,6 +71,16 @@ class CobaltAPI {
             return true;
         }
 
+        // Don't retry on 429 rate limit errors
+        // Let BatchProcessor handle key rotation instead
+        if (message.includes('429') ||
+            message.includes('rate limit') ||
+            message.includes('rate_limit') ||
+            error.status === 429) {
+            console.log('[Buttercup] 429 rate limit detected - passing to BatchProcessor for key rotation');
+            return true;
+        }
+
         return false;
     }
 
