@@ -464,41 +464,124 @@ class BatchProcessor {
             // Pass full URL if available (for non-YouTube platforms), otherwise video ID
             const videoUrlOrId = video.url || video.videoId;
 
-            await new Promise((resolve, reject) => {
-                window.transcriptionHandler.processVideo(
-                    videoUrlOrId, // Pass URL for multi-platform support
-                    useWhisperTranslation, // Use transcription, not Whisper translation
-                    // onProgress callback - transcription.js only passes status string as first param
-                    (statusText) => {
-                        video.currentStep = statusText || 'Processing...';
-                        // Map status to approximate progress percentage
-                        if (statusText && statusText.includes('Downloading')) {
-                            video.progress = 20;
-                        } else if (statusText && statusText.includes('Processing')) {
-                            video.progress = 40;
-                        } else if (statusText && (statusText.includes('Transcribing') || statusText.includes('Translating'))) {
-                            video.progress = 60;
-                        } else {
-                            video.progress = Math.min((video.progress || 0) + 10, 90);
+            // Retry logic with automatic key rotation on 429 errors
+            const maxTranscriptionRetries = 3;
+            let transcriptionAttempt = 0;
+            let lastTranscriptionError = null;
+
+            while (transcriptionAttempt < maxTranscriptionRetries) {
+                try {
+                    await new Promise((resolve, reject) => {
+                        window.transcriptionHandler.processVideo(
+                            videoUrlOrId, // Pass URL for multi-platform support
+                            useWhisperTranslation, // Use transcription, not Whisper translation
+                            // onProgress callback - transcription.js only passes status string as first param
+                            (statusText) => {
+                                video.currentStep = statusText || 'Processing...';
+                                // Map status to approximate progress percentage
+                                if (statusText && statusText.includes('Downloading')) {
+                                    video.progress = 20;
+                                } else if (statusText && statusText.includes('Processing')) {
+                                    video.progress = 40;
+                                } else if (statusText && (statusText.includes('Transcribing') || statusText.includes('Translating'))) {
+                                    video.progress = 60;
+                                } else {
+                                    video.progress = Math.min((video.progress || 0) + 10, 90);
+                                }
+                                this.notifyUpdate();
+                                this.saveState();
+                            },
+                            // onSuccess callback
+                            (youtubeFormat) => {
+                                console.log('[BatchProcessor] onSuccess called, youtubeFormat:', youtubeFormat ? 'received' : 'NULL');
+                                if (youtubeFormat && youtubeFormat.events) {
+                                    console.log('[BatchProcessor] Transcript has', youtubeFormat.events.length, 'caption events');
+                                }
+                                video.result = youtubeFormat;
+                                resolve(youtubeFormat);
+                            },
+                            // onError callback
+                            (error) => {
+                                reject(error);
+                            }
+                        );
+                    });
+
+                    // Success! Break out of retry loop
+                    break;
+
+                } catch (transcriptionError) {
+                    lastTranscriptionError = transcriptionError;
+
+                    // Check if it's a 429 rate limit error
+                    const is429Error = transcriptionError.message && (
+                        transcriptionError.message.includes('429') ||
+                        transcriptionError.message.includes('Rate limit') ||
+                        transcriptionError.message.includes('rate limit') ||
+                        transcriptionError.status === 429
+                    );
+
+                    if (is429Error && this.keyPool && selectedKeyTracker) {
+                        console.log(`[BatchProcessor] 🚫 Rate limit (429) detected on Key ${selectedKeyTracker.index + 1}`);
+
+                        if (window.buttercupLogger) {
+                            window.buttercupLogger.warn('BATCH', `Rate limit hit on Key ${selectedKeyTracker.index + 1}`, {
+                                videoId: video.videoId,
+                                attempt: transcriptionAttempt + 1,
+                                errorMessage: transcriptionError.message
+                            });
                         }
-                        this.notifyUpdate();
-                        this.saveState();
-                    },
-                    // onSuccess callback
-                    (youtubeFormat) => {
-                        console.log('[BatchProcessor] onSuccess called, youtubeFormat:', youtubeFormat ? 'received' : 'NULL');
-                        if (youtubeFormat && youtubeFormat.events) {
-                            console.log('[BatchProcessor] Transcript has', youtubeFormat.events.length, 'caption events');
+
+                        // Use key pool to handle 429 error and get next available key
+                        const nextKey = this.keyPool.handle429Error(selectedKeyTracker, transcriptionError.message);
+
+                        if (nextKey && transcriptionAttempt < maxTranscriptionRetries - 1) {
+                            // Found alternative key - update config and retry
+                            selectedKeyTracker = nextKey;
+                            video.selectedKeyIndex = nextKey.index;
+
+                            if (window.apiConfig && window.apiConfig.groqAPI) {
+                                window.apiConfig.groqAPI.setApiKey(nextKey.apiKey);
+                                console.log(`[BatchProcessor] 🔄 Switched to Key ${nextKey.index + 1} - retrying transcription`);
+                            }
+
+                            video.currentStep = `Retrying with Key ${nextKey.index + 1}...`;
+                            this.notifyUpdate();
+
+                            transcriptionAttempt++;
+
+                            // Small delay before retry
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            continue; // Retry with new key
+
+                        } else if (!nextKey) {
+                            // No alternative keys available
+                            const minWaitTime = this.keyPool.getMinWaitTime();
+                            const waitMessage = minWaitTime > 0
+                                ? `All ${this.keyPool.keys.length} API keys are rate limited. Please wait ${minWaitTime}s for next available key.`
+                                : `All ${this.keyPool.keys.length} API keys exhausted. Please add more keys or wait for quota reset.`;
+
+                            console.error(`[BatchProcessor] ⏸️ ${waitMessage}`);
+                            throw new Error(waitMessage);
                         }
-                        video.result = youtubeFormat;
-                        resolve(youtubeFormat);
-                    },
-                    // onError callback
-                    (error) => {
-                        reject(error);
                     }
-                );
-            });
+
+                    // Not a 429 error, or max retries reached - propagate error
+                    transcriptionAttempt++;
+
+                    if (transcriptionAttempt >= maxTranscriptionRetries) {
+                        console.error(`[BatchProcessor] Max transcription retries (${maxTranscriptionRetries}) reached`);
+                        throw lastTranscriptionError;
+                    }
+
+                    // Generic retry with backoff
+                    const retryDelay = Math.min(2 ** transcriptionAttempt * 1000, 10000);
+                    console.warn(`[BatchProcessor] Transcription attempt ${transcriptionAttempt} failed, retrying in ${retryDelay}ms...`);
+                    video.currentStep = `Retry ${transcriptionAttempt}/${maxTranscriptionRetries} (${retryDelay/1000}s)...`;
+                    this.notifyUpdate();
+                    await new Promise(resolve => setTimeout(resolve, retryDelay));
+                }
+            }
 
             // Apply LLM translation if enabled and configured
             let finalCaptionData = video.result;
