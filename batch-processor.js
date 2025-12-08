@@ -535,8 +535,10 @@ class BatchProcessor {
                         // Use key pool to handle 429 error and get next available key
                         const nextKey = this.keyPool.handle429Error(selectedKeyTracker, transcriptionError.message);
 
-                        if (nextKey && transcriptionAttempt < maxTranscriptionRetries - 1) {
+                        if (nextKey) {
                             // Found alternative key - update config and retry
+                            // IMPORTANT: Do NOT increment transcriptionAttempt for key rotation!
+                            // We want to rotate through ALL available keys, not be limited by maxTranscriptionRetries
                             selectedKeyTracker = nextKey;
                             video.selectedKeyIndex = nextKey.index;
 
@@ -548,14 +550,12 @@ class BatchProcessor {
                             video.currentStep = `Retrying with Key ${nextKey.index + 1}...`;
                             this.notifyUpdate();
 
-                            transcriptionAttempt++;
-
                             // Small delay before retry
                             await new Promise(resolve => setTimeout(resolve, 2000));
-                            continue; // Retry with new key
+                            continue; // Retry with new key WITHOUT incrementing attempt counter
 
-                        } else if (!nextKey) {
-                            // No alternative keys available
+                        } else {
+                            // No alternative keys available - all keys exhausted
                             const minWaitTime = this.keyPool.getMinWaitTime();
                             const waitMessage = minWaitTime > 0
                                 ? `All ${this.keyPool.keys.length} API keys are rate limited. Please wait ${minWaitTime}s for next available key.`
@@ -566,7 +566,7 @@ class BatchProcessor {
                         }
                     }
 
-                    // Not a 429 error, or max retries reached - propagate error
+                    // Not a 429 error - use normal retry logic with attempt counter
                     transcriptionAttempt++;
 
                     if (transcriptionAttempt >= maxTranscriptionRetries) {
