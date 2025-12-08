@@ -839,31 +839,72 @@ class BatchProcessor {
                     setTimeout(() => this.processQueue(), 500);
                     return; // Exit early to avoid normal retry logic
                 } else {
-                    // All keys are rate limited - wait for next available
+                    // All keys are rate limited
                     const minWaitTime = this.keyPool.getMinWaitTime();
-                    const waitMessage = `All ${this.keyPool.keys.length} API keys rate limited. Retry in ${minWaitTime}s.`;
 
-                    console.log(`[BatchProcessor] ⏸️ ${waitMessage}`);
-                    video.error = waitMessage;
-                    video.currentStep = `Waiting ${minWaitTime}s...`;
-
-                    if (window.buttercupLogger) {
-                        window.buttercupLogger.warn('BATCH', waitMessage);
+                    // Check if this video is too long for current keys
+                    // Parse requested duration from error message
+                    let requestedDuration = 0;
+                    const requestedMatch = error.message.match(/Requested\s+(\d+)/);
+                    if (requestedMatch) {
+                        requestedDuration = parseInt(requestedMatch[1]);
                     }
 
-                    // Don't increment retries for rate limit - just wait and retry
-                    video.status = 'pending';
+                    // Check if ANY key will have enough quota after waiting
+                    const maxKeyQuota = Math.max(...this.keyPool.keys.map(k => k.getRemaining()));
+                    const canRetryLater = requestedDuration === 0 || maxKeyQuota >= requestedDuration || minWaitTime > 60;
 
-                    // Move back to queue
-                    this.currentlyProcessing = this.currentlyProcessing.filter(v => v.videoId !== video.videoId);
-                    this.queue.unshift(video);
+                    if (canRetryLater && minWaitTime <= 300) {
+                        // Can retry later - wait and retry automatically (max 5 minutes wait)
+                        const waitMessage = `All ${this.keyPool.keys.length} keys rate limited. Auto-retry in ${minWaitTime}s.`;
 
-                    await this.saveState();
-                    this.notifyUpdate();
+                        console.log(`[BatchProcessor] ⏸️ ${waitMessage}`);
+                        video.error = waitMessage;
+                        video.currentStep = `Waiting ${minWaitTime}s...`;
 
-                    // Wait for the specified time before continuing
-                    setTimeout(() => this.processQueue(), minWaitTime * 1000);
-                    return; // Exit early
+                        if (window.buttercupLogger) {
+                            window.buttercupLogger.warn('BATCH', waitMessage);
+                        }
+
+                        // Move back to queue for auto-retry
+                        video.status = 'pending';
+                        this.currentlyProcessing = this.currentlyProcessing.filter(v => v.videoId !== video.videoId);
+                        this.queue.unshift(video);
+
+                        await this.saveState();
+                        this.notifyUpdate();
+
+                        // Wait for the specified time before continuing
+                        console.log(`[BatchProcessor] ⏰ Waiting ${minWaitTime}s before auto-retry...`);
+                        setTimeout(() => this.processQueue(), minWaitTime * 1000);
+                        return; // Exit early
+                    } else {
+                        // Video too long OR wait time too long - mark as failed
+                        const reason = requestedDuration > maxKeyQuota
+                            ? `Video too long (${Math.ceil(requestedDuration/60)}min). No key has enough quota. Add more keys or wait for hourly reset.`
+                            : `All keys exhausted. Wait time: ${Math.ceil(minWaitTime/60)}min. Use 'Retry Failed' when ready.`;
+
+                        console.error(`[BatchProcessor] ❌ ${reason}`);
+                        video.error = reason;
+                        video.currentStep = 'Failed - Manual retry required';
+                        video.status = 'failed';
+
+                        if (window.buttercupLogger) {
+                            window.buttercupLogger.error('BATCH', reason, { videoId: video.videoId });
+                        }
+
+                        // Mark as failed - user must manually retry
+                        this.currentlyProcessing = this.currentlyProcessing.filter(v => v.videoId !== video.videoId);
+                        this.failed.push(video);
+                        this.stats.failedVideos++;
+
+                        await this.saveState();
+                        this.notifyUpdate();
+
+                        // Continue with next video immediately
+                        setTimeout(() => this.processQueue(), 100);
+                        return; // Exit early
+                    }
                 }
             }
 
