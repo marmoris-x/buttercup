@@ -579,7 +579,7 @@ function displayTranscripts() {
                         <input type="checkbox" class="checkbox checkbox-sm"
                                ${isSelected ? 'checked' : ''}
                                data-video-id="${videoId}"
-                               onchange="window.toggleSelection('${escapeHtml(videoId)}')" />
+                               data-action="toggleSelection" />
                     </div>
 
                     <!-- Thumbnail -->
@@ -741,30 +741,34 @@ function setupEventDelegation() {
         }
     });
 
-    // Handle folder select changes
+    // Handle folder select changes and checkbox toggles
     document.getElementById('transcripts-container').addEventListener('change', (event) => {
-        const select = event.target.closest('select[data-action]');
-        if (!select) return;
+        const element = event.target.closest('[data-action]');
+        if (!element) return;
 
-        const action = select.dataset.action;
-        const videoId = select.dataset.videoId;
+        const action = element.dataset.action;
+        const videoId = element.dataset.videoId;
 
         if (action === 'assignFolder') {
-            assignToFolder(videoId, select.value);
+            assignToFolder(videoId, element.value);
+        } else if (action === 'toggleSelection') {
+            toggleSelection(videoId);
         }
     });
 }
 
-// Global functions (called from HTML onclick)
-window.toggleSelection = function(videoId) {
+function toggleSelection(videoId) {
+    console.log('[Transcripts] Toggle selection for:', videoId);
     if (selectedIds.has(videoId)) {
         selectedIds.delete(videoId);
+        console.log('[Transcripts] Deselected. Total selected:', selectedIds.size);
     } else {
         selectedIds.add(videoId);
+        console.log('[Transcripts] Selected. Total selected:', selectedIds.size);
     }
     displayTranscripts();
     updateBulkToolbar();
-};
+}
 
 function toggleFavorite(videoId) {
     if (!transcriptMeta.favorites) transcriptMeta.favorites = {};
