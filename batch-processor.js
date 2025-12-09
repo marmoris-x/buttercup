@@ -912,7 +912,7 @@ class BatchProcessor {
 
                     // Check if ANY key will have enough quota after waiting
                     const maxKeyQuota = Math.max(...this.keyPool.keys.map(k => k.getRemaining()));
-                    const canRetryLater = requestedDuration === 0 || maxKeyQuota >= requestedDuration || minWaitTime > 60;
+                    const canRetryLater = requestedDuration === 0 || maxKeyQuota >= requestedDuration;
 
                     if (canRetryLater && minWaitTime <= 300) {
                         // Can retry later - wait and retry automatically (max 5 minutes wait)
