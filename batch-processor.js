@@ -308,6 +308,25 @@ class BatchProcessor {
         this.isPaused = false;
         this.stats.endTime = Date.now();
 
+        // Move all currently processing videos back to queue
+        // This handles videos stuck in "Starting server-side transcription..." or similar states
+        if (this.currentlyProcessing.length > 0) {
+            console.log(`[BatchProcessor] Moving ${this.currentlyProcessing.length} processing video(s) back to queue`);
+
+            this.currentlyProcessing.forEach(video => {
+                video.status = 'pending';
+                video.progress = 0;
+                video.currentStep = 'Stopped';
+                video.error = null;
+
+                // Add back to front of queue
+                this.queue.unshift(video);
+            });
+
+            // Clear currently processing
+            this.currentlyProcessing = [];
+        }
+
         if (window.buttercupLogger) {
             window.buttercupLogger.info('BATCH', 'Batch processing stopped', this.getStats());
         }
