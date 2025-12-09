@@ -446,6 +446,47 @@ class BatchProcessor {
                 console.log(`[BatchProcessor] Updated API config with Key ${selectedKeyTracker.index + 1}`);
             }
 
+            // CRITICAL: Update apiConfig with video-specific settings from video.options
+            // This ensures batch processing uses the SAME settings as web/upload transcription
+            if (video.options && window.apiConfig) {
+                console.log('[BatchProcessor] Applying video-specific settings to apiConfig:', {
+                    language: video.options.language,
+                    groqModel: video.options.groqModel,
+                    temperature: video.options.temperature,
+                    responseFormat: video.options.responseFormat,
+                    hasPrompt: !!video.options.prompt,
+                    useWordTimestamps: video.options.useWordTimestamps
+                });
+
+                // Apply Groq Whisper settings
+                if (video.options.groqModel) {
+                    window.apiConfig.groqModel = video.options.groqModel;
+                    window.apiConfig.groqAPI.setModel(video.options.groqModel);
+                }
+
+                if (video.options.language) {
+                    window.apiConfig.language = video.options.language;
+                }
+
+                if (video.options.temperature !== undefined) {
+                    window.apiConfig.temperature = video.options.temperature;
+                }
+
+                if (video.options.responseFormat) {
+                    window.apiConfig.responseFormat = video.options.responseFormat;
+                }
+
+                if (video.options.prompt !== undefined) {
+                    window.apiConfig.prompt = video.options.prompt;
+                }
+
+                if (video.options.useWordTimestamps !== undefined) {
+                    window.apiConfig.useWordTimestamps = video.options.useWordTimestamps;
+                }
+
+                console.log('[BatchProcessor] ✓ Settings applied to apiConfig');
+            }
+
             // Wait for API config to have all required keys (with timeout)
             const maxWaitTime = 5000; // 5 seconds
             const startWait = Date.now();

@@ -286,9 +286,17 @@ class BatchUI {
         console.log(`[BatchUI] Total videos to add: ${allVideoUrls.length} (${videoUrls.length} direct + ${allVideoUrls.length - videoUrls.length} from playlists)`);
 
 
-        // Load translation settings from sync storage
-        const translationSettings = await new Promise((resolve) => {
+        // Load ALL settings from sync storage (Groq API + LLM Translation)
+        const allSettings = await new Promise((resolve) => {
             chrome.storage.sync.get([
+                // Groq Whisper Settings
+                'buttercup_groq_model',
+                'buttercup_language',
+                'buttercup_temperature',
+                'buttercup_response_format',
+                'buttercup_prompt',
+                'buttercup_use_word_timestamps',
+                // LLM Translation Settings
                 'buttercup_llm_translation_enabled',
                 'buttercup_llm_target_language',
                 'buttercup_llm_provider',
@@ -296,21 +304,37 @@ class BatchUI {
                 'buttercup_llm_model'
             ], (result) => {
                 resolve({
+                    // Groq Whisper Settings
+                    groqModel: result.buttercup_groq_model || 'whisper-large-v3',
+                    language: result.buttercup_language || 'auto',
+                    temperature: result.buttercup_temperature !== undefined ? result.buttercup_temperature : 0,
+                    responseFormat: result.buttercup_response_format || 'verbose_json',
+                    prompt: result.buttercup_prompt || '',
+                    useWordTimestamps: result.buttercup_use_word_timestamps !== false,
+                    // LLM Translation Settings
                     translate: result.buttercup_llm_translation_enabled === true,
                     targetLanguage: result.buttercup_llm_target_language || 'English',
                     provider: result.buttercup_llm_provider || 'openai',
-                    apiKey: result.buttercup_llm_api_key || '',
-                    model: result.buttercup_llm_model || ''
+                    llmApiKey: result.buttercup_llm_api_key || '',
+                    llmModel: result.buttercup_llm_model || ''
                 });
             });
         });
 
-        console.log('[BatchUI] Using translation settings:', {
-            translate: translationSettings.translate,
-            targetLanguage: translationSettings.targetLanguage,
-            provider: translationSettings.provider,
-            hasApiKey: !!translationSettings.apiKey,
-            model: translationSettings.model
+        console.log('[BatchUI] Using settings:', {
+            // Groq Whisper
+            groqModel: allSettings.groqModel,
+            language: allSettings.language,
+            temperature: allSettings.temperature,
+            responseFormat: allSettings.responseFormat,
+            hasPrompt: !!allSettings.prompt,
+            useWordTimestamps: allSettings.useWordTimestamps,
+            // LLM Translation
+            translate: allSettings.translate,
+            targetLanguage: allSettings.targetLanguage,
+            provider: allSettings.provider,
+            hasLlmApiKey: !!allSettings.llmApiKey,
+            llmModel: allSettings.llmModel
         });
 
         // Extract video IDs directly in popup context
@@ -340,11 +364,19 @@ class BatchUI {
                     progress: 0,
                     currentStep: '',
                     options: {
-                        translate: translationSettings.translate,
-                        targetLanguage: translationSettings.targetLanguage,
-                        provider: translationSettings.provider,
-                        llmApiKey: translationSettings.apiKey,
-                        llmModel: translationSettings.model
+                        // Groq Whisper Settings (must match exactly what TranscriptionHandler expects)
+                        groqModel: allSettings.groqModel,
+                        language: allSettings.language,
+                        temperature: allSettings.temperature,
+                        responseFormat: allSettings.responseFormat,
+                        prompt: allSettings.prompt,
+                        useWordTimestamps: allSettings.useWordTimestamps,
+                        // LLM Translation Settings
+                        translate: allSettings.translate,
+                        targetLanguage: allSettings.targetLanguage,
+                        provider: allSettings.provider,
+                        llmApiKey: allSettings.llmApiKey,
+                        llmModel: allSettings.llmModel
                     },
                     addedAt: Date.now(),
                     startedAt: null,
