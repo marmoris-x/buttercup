@@ -63,6 +63,38 @@ function extractVideoId(url) {
             return generateHashFromUrl(url);
         }
 
+        // Twitch
+        if (hostname.includes('twitch.tv')) {
+            const videoMatch = pathname.match(/\/videos\/(\d+)/);
+            if (videoMatch) return videoMatch[1];
+            const clipMatch = pathname.match(/\/clip\/([a-zA-Z0-9_-]+)/);
+            if (clipMatch) return clipMatch[1];
+        }
+
+        // Reddit
+        if (hostname.includes('reddit.com')) {
+            const match = pathname.match(/\/comments\/([a-zA-Z0-9]+)/);
+            if (match) return match[1];
+        }
+
+        // Bilibili
+        if (hostname.includes('bilibili.com')) {
+            const match = pathname.match(/\/video\/(BV[a-zA-Z0-9]+|av\d+)/);
+            if (match) return match[1];
+        }
+
+        // Rumble
+        if (hostname.includes('rumble.com')) {
+            const match = pathname.match(/\/([a-zA-Z0-9-]+)\.html/);
+            if (match) return match[1];
+        }
+
+        // Odysee
+        if (hostname.includes('odysee.com')) {
+            const match = pathname.match(/\/@[^/]+\/([^/:]+)/);
+            if (match) return match[1];
+        }
+
         // Unknown platform - return null
         return null;
     } catch (error) {
@@ -101,6 +133,11 @@ function getPlatformFromUrl(url) {
         if (hostname.includes('tiktok.com')) return 'TikTok';
         if (hostname.includes('instagram.com')) return 'Instagram';
         if (hostname.includes('facebook.com') || hostname.includes('fb.watch')) return 'Facebook';
+        if (hostname.includes('twitch.tv')) return 'Twitch';
+        if (hostname.includes('reddit.com')) return 'Reddit';
+        if (hostname.includes('bilibili.com')) return 'Bilibili';
+        if (hostname.includes('rumble.com')) return 'Rumble';
+        if (hostname.includes('odysee.com')) return 'Odysee';
 
         // Default: capitalize first part of domain
         return hostname.replace(/^www\./, '').split('.')[0].charAt(0).toUpperCase() +

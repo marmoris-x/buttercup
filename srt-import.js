@@ -181,19 +181,13 @@ class SRTImporter {
     }
 
     extractVideoId(url) {
-        // YouTube
-        let match = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
-        if (match) return match[1];
+        // Use centralized VideoIDUtils for consistency
+        if (window.VideoIDUtils && window.VideoIDUtils.extractVideoId) {
+            const videoId = window.VideoIDUtils.extractVideoId(url);
+            if (videoId) return videoId;
+        }
 
-        // TikTok
-        match = url.match(/tiktok\.com\/.*\/video\/(\d+)/);
-        if (match) return 'tiktok_' + match[1];
-
-        // Vimeo
-        match = url.match(/vimeo\.com\/(\d+)/);
-        if (match) return 'vimeo_' + match[1];
-
-        // Fallback
+        // Fallback: generate hash from URL if VideoIDUtils fails or is unavailable
         return 'imported_' + this.hashString(url);
     }
 

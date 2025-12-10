@@ -545,36 +545,14 @@ class BatchUI {
         }
     }
 
-    // Extract video ID from URL - supports multiple platforms
+    // Extract video ID from URL - uses centralized VideoIDUtils
     extractVideoId(url) {
-        // YouTube patterns
-        const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]+)/);
-        if (youtubeMatch) return youtubeMatch[1];
+        // Use centralized VideoIDUtils for consistency across all features
+        if (window.VideoIDUtils && window.VideoIDUtils.extractVideoId) {
+            return window.VideoIDUtils.extractVideoId(url);
+        }
 
-        // Direct YouTube video ID
-        if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return url;
-
-        // Vimeo
-        const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-        if (vimeoMatch) return vimeoMatch[1];
-
-        // Dailymotion
-        const dailymotionMatch = url.match(/(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)/);
-        if (dailymotionMatch) return dailymotionMatch[1];
-
-        // Twitter/X
-        const twitterMatch = url.match(/(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/);
-        if (twitterMatch) return twitterMatch[1];
-
-        // TikTok
-        const tiktokMatch = url.match(/tiktok\.com\/@[\w.-]+\/video\/(\d+)/);
-        if (tiktokMatch) return tiktokMatch[1];
-
-        // Instagram
-        const instagramMatch = url.match(/instagram\.com\/(?:p|reels?|tv)\/([a-zA-Z0-9_-]+)/);
-        if (instagramMatch) return instagramMatch[1];
-
-        // Fallback: generate hash from URL for any other site
+        // Fallback: generate hash from URL if VideoIDUtils is unavailable
         if (url.startsWith('http')) {
             let hash = 0;
             for (let i = 0; i < url.length; i++) {
@@ -587,33 +565,19 @@ class BatchUI {
         return null;
     }
 
-    // Get platform name from URL
-    // Get platform name from URL - UNIVERSAL approach
+    // Get platform name from URL - uses centralized VideoIDUtils
     getPlatformFromUrl(url) {
+        // Use centralized VideoIDUtils for consistency
+        if (window.VideoIDUtils && window.VideoIDUtils.getPlatformFromUrl) {
+            return window.VideoIDUtils.getPlatformFromUrl(url);
+        }
+
+        // Fallback if VideoIDUtils is unavailable
         if (!url) return 'Video';
 
         try {
             const urlObj = new URL(url);
-            const hostname = urlObj.hostname;
-
-            // Map common hostnames to friendly names
-            const knownPlatforms = {
-                'youtube.com': 'YouTube', 'www.youtube.com': 'YouTube', 'youtu.be': 'YouTube',
-                'vimeo.com': 'Vimeo', 'www.vimeo.com': 'Vimeo',
-                'dailymotion.com': 'Dailymotion', 'www.dailymotion.com': 'Dailymotion', 'dai.ly': 'Dailymotion',
-                'twitter.com': 'Twitter', 'x.com': 'X',
-                'tiktok.com': 'TikTok', 'www.tiktok.com': 'TikTok',
-                'instagram.com': 'Instagram', 'www.instagram.com': 'Instagram',
-                'facebook.com': 'Facebook', 'www.facebook.com': 'Facebook', 'fb.watch': 'Facebook',
-                'twitch.tv': 'Twitch', 'www.twitch.tv': 'Twitch'
-            };
-
-            if (knownPlatforms[hostname]) {
-                return knownPlatforms[hostname];
-            }
-
-            // For unknown platforms, capitalize hostname
-            let cleanHost = hostname.replace(/^www\./, '');
+            let cleanHost = urlObj.hostname.replace(/^www\./, '');
             const parts = cleanHost.split('.');
             return parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
         } catch (e) {

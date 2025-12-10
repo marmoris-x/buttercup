@@ -841,98 +841,32 @@ function isYouTubeVideoUrl(url) {
 function getVideoIdFromTab(tab) {
     if (!tab || !tab.url) return null;
 
-    const url = new URL(tab.url);
-    const hostname = url.hostname;
-    const pathname = url.pathname;
+    // Use centralized VideoIDUtils for consistency across all features
+    if (window.VideoIDUtils && window.VideoIDUtils.extractVideoId) {
+        return window.VideoIDUtils.extractVideoId(tab.url);
+    }
 
-    // YouTube
-    if (hostname.includes('youtube.com') || hostname.includes('youtu.be')) {
-        if (pathname.startsWith('/clip')) {
-            return null;
-        } else if (pathname.startsWith('/shorts')) {
-            return pathname.slice(8);
+    // Fallback: basic YouTube extraction if VideoIDUtils is unavailable
+    try {
+        const url = new URL(tab.url);
+        if (url.hostname.includes('youtube.com') || url.hostname.includes('youtu.be')) {
+            if (url.pathname.startsWith('/shorts')) {
+                return url.pathname.slice(8);
+            }
+            return url.searchParams.get('v') || url.pathname.slice(1);
         }
-        return url.searchParams.get('v') || pathname.slice(1); // youtu.be/ID
-    }
 
-    // Vimeo
-    if (hostname.includes('vimeo.com')) {
-        const match = pathname.match(/\/(\d+)/);
-        return match ? match[1] : null;
+        // Fallback hash for other platforms
+        let hash = 0;
+        const str = tab.url;
+        for (let i = 0; i < str.length; i++) {
+            hash = ((hash << 5) - hash) + str.charCodeAt(i);
+            hash = hash & hash;
+        }
+        return Math.abs(hash).toString(36);
+    } catch (e) {
+        return null;
     }
-
-    // Dailymotion
-    if (hostname.includes('dailymotion.com')) {
-        const match = pathname.match(/\/video\/([a-zA-Z0-9]+)/);
-        return match ? match[1] : null;
-    }
-
-    // Twitter/X
-    if (hostname.includes('twitter.com') || hostname.includes('x.com')) {
-        const match = pathname.match(/\/status\/(\d+)/);
-        return match ? match[1] : null;
-    }
-
-    // TikTok
-    if (hostname.includes('tiktok.com')) {
-        const match = pathname.match(/\/video\/(\d+)/);
-        return match ? match[1] : null;
-    }
-
-    // Instagram
-    if (hostname.includes('instagram.com')) {
-        const match = pathname.match(/\/(?:p|reels?|tv)\/([a-zA-Z0-9_-]+)/);
-        return match ? match[1] : null;
-    }
-
-    // Facebook
-    if (hostname.includes('facebook.com') || hostname.includes('fb.watch')) {
-        // Match numeric ID at end of path (use [0-9] to avoid matching Arabic numerals)
-        const match = pathname.match(/\/([0-9]+)\/?$/);
-        if (match) return match[1];
-        // Fallback: use URL hash
-    }
-
-    // Twitch
-    if (hostname.includes('twitch.tv')) {
-        const videoMatch = pathname.match(/\/videos\/(\d+)/);
-        if (videoMatch) return videoMatch[1];
-        const clipMatch = pathname.match(/\/clip\/([a-zA-Z0-9_-]+)/);
-        if (clipMatch) return clipMatch[1];
-    }
-
-    // Reddit
-    if (hostname.includes('reddit.com')) {
-        const match = pathname.match(/\/comments\/([a-zA-Z0-9]+)/);
-        if (match) return match[1];
-    }
-
-    // Bilibili
-    if (hostname.includes('bilibili.com')) {
-        const match = pathname.match(/\/video\/(BV[a-zA-Z0-9]+|av\d+)/);
-        if (match) return match[1];
-    }
-
-    // Rumble
-    if (hostname.includes('rumble.com')) {
-        const match = pathname.match(/\/([a-zA-Z0-9-]+)\.html/);
-        if (match) return match[1];
-    }
-
-    // Odysee
-    if (hostname.includes('odysee.com')) {
-        const match = pathname.match(/\/@[^/]+\/([^/:]+)/);
-        if (match) return match[1];
-    }
-
-    // Fallback: generate hash from URL
-    let hash = 0;
-    const str = tab.url;
-    for (let i = 0; i < str.length; i++) {
-        hash = ((hash << 5) - hash) + str.charCodeAt(i);
-        hash = hash & hash;
-    }
-    return Math.abs(hash).toString(36);
 }
 
 // Get platform name from URL - universal approach

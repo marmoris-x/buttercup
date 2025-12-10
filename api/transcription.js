@@ -192,29 +192,15 @@ class TranscriptionHandler {
      * @returns {string} - Video ID or hash of URL
      */
     extractVideoIdFromUrl(url) {
+        // Use centralized VideoIDUtils for consistency (if available in MAIN world context)
+        if (window.VideoIDUtils && window.VideoIDUtils.extractVideoId) {
+            return window.VideoIDUtils.extractVideoId(url);
+        }
+
+        // Fallback: Basic extraction if VideoIDUtils is unavailable
         // YouTube
         const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]+)/);
         if (youtubeMatch) return youtubeMatch[1];
-
-        // Vimeo
-        const vimeoMatch = url.match(/vimeo\.com\/(?:video\/)?(\d+)/);
-        if (vimeoMatch) return vimeoMatch[1];
-
-        // Dailymotion
-        const dailymotionMatch = url.match(/(?:dailymotion\.com\/video\/|dai\.ly\/)([a-zA-Z0-9]+)/);
-        if (dailymotionMatch) return dailymotionMatch[1];
-
-        // Twitter/X
-        const twitterMatch = url.match(/(?:twitter\.com|x\.com)\/\w+\/status\/(\d+)/);
-        if (twitterMatch) return twitterMatch[1];
-
-        // TikTok
-        const tiktokMatch = url.match(/tiktok\.com\/@[\w.-]+\/video\/(\d+)/);
-        if (tiktokMatch) return tiktokMatch[1];
-
-        // Instagram
-        const instagramMatch = url.match(/instagram\.com\/(?:p|reels?|tv)\/([a-zA-Z0-9_-]+)/);
-        if (instagramMatch) return instagramMatch[1];
 
         // Fallback: generate hash from URL
         let hash = 0;
